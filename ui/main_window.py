@@ -8,9 +8,10 @@ from utils.constants import *
 PAGES = ("Login", "MainMenu", "Zones", "Modes", "Monitoring")
 
 class SafeHomeApp:
-    def __init__(self, root, controller, sensors):
+    def __init__(self, root, system, sensors):
         self.root = root
-        self.controller = controller
+        self.system = system  # System 인스턴스
+        self.controller = system.system_controller  # 기존 호환성 유지
         self.sensors = sensors
         
         self.root.title("SafeHome Prototype")
@@ -37,7 +38,7 @@ class SafeHomeApp:
         for page_name in PAGES:
             cls = globals()[f"{page_name}View"]
             # app=self를 전달하여 뷰에서 SafeHomeApp 메서드 호출 가능하게 함
-            frame = cls(parent=container, controller=self.controller, sensors=self.sensors, app=self)
+            frame = cls(parent=container, system=self.system, sensors=self.sensors, app=self)
             self.frames[page_name] = frame
             frame.grid(row=0, column=0, sticky="nsew")
 
@@ -91,59 +92,65 @@ class SafeHomeApp:
 # --- View Classes (기존 UI 디자인 반영) ---
 
 class LoginView(ttk.Frame):
-    def __init__(self, parent, controller, sensors, app):
+    def __init__(self, parent, system, sensors, app):
         super().__init__(parent)
-        self.controller = controller
+        self.system = system
         self.app = app
-        
+
         ttk.Label(self, text="SafeHome", style="Title.TLabel").pack(pady=(40, 30))
-        
+
         panel = ttk.Frame(self, padding=30, relief="groove")
         panel.pack()
-        
+
         ttk.Label(panel, text="LOGIN SAFEHOME SYSTEM", font=("Helvetica", 12, "bold")).pack(pady=(0, 20))
-        
+
         self.user_entry = ttk.Entry(panel, width=30)
         self.pass_entry = ttk.Entry(panel, width=30, show="•")
-        
+
         ttk.Label(panel, text="User ID").pack(anchor="w")
         self.user_entry.pack(pady=(0, 10))
-        # [수정 1] 자동 입력 제거 (빈 칸으로 시작)
-        
+
         ttk.Label(panel, text="Password").pack(anchor="w")
         self.pass_entry.pack(pady=(0, 20))
-        
+
         ttk.Button(panel, text="LOGIN", style="Primary.TButton",
                    command=self.attempt_login).pack()
 
     def attempt_login(self):
         uid = self.user_entry.get()
         pw = self.pass_entry.get()
-        if self.controller.login(uid, pw):
+        # Common Function 1: Log onto the system through control panel
+        if self.system.login(uid, pw, interface='control_panel'):
             self.app.show_page("MainMenu")
         else:
             messagebox.showerror("Login Failed", "Invalid ID or Password")
 
 
 class MainMenuView(ttk.Frame):
-    def __init__(self, parent, controller, sensors, app):
+    def __init__(self, parent, system, sensors, app):
         super().__init__(parent)
+        self.system = system
         self.app = app
-        
+
         ttk.Label(self, text="SafeHome", style="Title.TLabel").pack(pady=(40, 30))
-        
+
         # 메뉴 버튼들
         for target, label in [("Zones", "SECURITY"), ("Modes", "SURVEILLANCE"), ("Monitoring", "CONFIGURE")]:
             ttk.Button(self, text=label, style="Primary.TButton",
                        command=lambda t=target: self.app.show_page(t)).pack(pady=10, ipadx=30)
-            
-        ttk.Button(self, text="LOGOUT", 
-                   command=lambda: self.app.show_page("Login")).pack(pady=20)
+
+        ttk.Button(self, text="LOGOUT",
+                   command=self.logout).pack(pady=20)
+
+    def logout(self):
+        self.system.logout()
+        self.app.show_page("Login")
 
 
 class ZonesView(ttk.Frame):
-    def __init__(self, parent, controller, sensors, app):
+    def __init__(self, parent, system, sensors, app):
         super().__init__(parent)
+        self.system = system
         self.app = app
         self.sensors = sensors
 
@@ -193,9 +200,10 @@ class ZonesView(ttk.Frame):
 
 
 class ModesView(ttk.Frame):
-    def __init__(self, parent, controller, sensors, app):
+    def __init__(self, parent, system, sensors, app):
         super().__init__(parent)
-        self.controller = controller
+        self.system = system
+        self.controller = system.system_controller
         self.app = app
         
         header = ttk.Frame(self)
@@ -247,62 +255,189 @@ class ModesView(ttk.Frame):
 
 
 class MonitoringView(ttk.Frame):
-    def __init__(self, parent, controller, sensors, app):
+    def __init__(self, parent, system, sensors, app):
         super().__init__(parent)
+        self.system = system
         self.app = app
-        
+
         header = ttk.Frame(self)
         header.pack(fill="x", pady=10, padx=10)
-        ttk.Label(header, text="SafeHome", style="Title.TLabel").pack(side="left")
+        ttk.Label(header, text="SafeHome - Configuration", style="Title.TLabel").pack(side="left")
         ttk.Button(header, text="Back", command=lambda: self.app.show_page("MainMenu")).pack(side="right")
 
-        # 툴바 (디자인용)
-        toolbar = ttk.Frame(self)
-        toolbar.pack(fill="x", padx=10)
-        for label in ["Access", "Configure", "System Status", "View", "Monitoring"]:
-            ttk.Button(toolbar, text=label).pack(side="left", padx=5)
+        # 탭 형태로 구성
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        main = ttk.Frame(self, padding=10)
-        main.pack(fill="both", expand=True)
+        # Tab 1: 시스템 설정 (Common Function 3)
+        settings_tab = ttk.Frame(notebook)
+        notebook.add(settings_tab, text="System Settings")
+        self._create_settings_tab(settings_tab)
 
-        # 좌측 제어 패널
-        left = ttk.Frame(main)
-        left.pack(side="left", fill="y", padx=(0, 10))
-        ttk.Label(left, text="RECORDING").pack(anchor="w")
-        for label in ["BEGIN", "STOP", "SHOW"]:
-            ttk.Button(left, text=label, style="Primary.TButton").pack(fill="x", pady=3)
+        # Tab 2: 비밀번호 변경 (Common Function 7)
+        password_tab = ttk.Frame(notebook)
+        notebook.add(password_tab, text="Change Password")
+        self._create_password_tab(password_tab)
 
-        # 모니터링 영역 (카메라 이미지 표시)
-        monitor_area = ttk.Frame(main)
-        monitor_area.pack(fill="both", expand=True, pady=10)
-        
-        # [수정 2] 카메라 이미지 3개 로드 및 배치
-        cam_files = ["camera1.jpg", "camera2.jpg", "camera3.jpg"]
-        self.cam_photos = []
+        # Tab 3: 시스템 제어
+        control_tab = ttk.Frame(notebook)
+        notebook.add(control_tab, text="System Control")
+        self._create_control_tab(control_tab)
 
-        # 그리드 레이아웃 사용
-        for i, cam_file in enumerate(cam_files):
-            frame = ttk.Frame(monitor_area, padding=5, relief="ridge")
-            # 2열로 배치 (0, 1번은 윗줄, 2번은 아랫줄)
-            row = 0 if i < 2 else 1
-            col = i % 2
-            frame.grid(row=row, column=col, padx=10, pady=10)
-            
-            photo = self.app.load_image(cam_file, (200, 150))
-            if photo:
-                lbl = tk.Label(frame, image=photo)
-                lbl.image = photo # 참조 유지
-                self.cam_photos.append(photo)
-                lbl.pack()
+    def _create_settings_tab(self, parent):
+        """Common Function 3: Configure system setting"""
+        panel = ttk.Frame(parent, padding=20)
+        panel.pack(fill="both", expand=True)
+
+        ttk.Label(panel, text="System Settings Configuration", font=("Helvetica", 14, "bold")).pack(pady=(0, 20))
+
+        # 현재 설정 로드
+        settings = self.system.configuration_manager.get_system_setting()
+
+        # 모니터링 서비스 전화번호
+        ttk.Label(panel, text="Monitoring Service Phone:").pack(anchor="w")
+        self.monitoring_phone_entry = ttk.Entry(panel, width=30)
+        self.monitoring_phone_entry.insert(0, settings.get_monitoring_service_phone())
+        self.monitoring_phone_entry.pack(pady=(0, 10))
+
+        # 집주인 전화번호
+        ttk.Label(panel, text="Homeowner Phone:").pack(anchor="w")
+        self.homeowner_phone_entry = ttk.Entry(panel, width=30)
+        self.homeowner_phone_entry.insert(0, settings.get_homeowner_phone())
+        self.homeowner_phone_entry.pack(pady=(0, 10))
+
+        # 시스템 잠금 시간
+        ttk.Label(panel, text="System Lock Time (seconds):").pack(anchor="w")
+        self.lock_time_entry = ttk.Entry(panel, width=30)
+        self.lock_time_entry.insert(0, str(settings.get_system_lock_time()))
+        self.lock_time_entry.pack(pady=(0, 10))
+
+        # 알람 지연 시간
+        ttk.Label(panel, text="Alarm Delay Time (seconds):").pack(anchor="w")
+        self.alarm_delay_entry = ttk.Entry(panel, width=30)
+        self.alarm_delay_entry.insert(0, str(settings.get_alarm_delay_time()))
+        self.alarm_delay_entry.pack(pady=(0, 20))
+
+        ttk.Button(panel, text="Save Settings", style="Primary.TButton",
+                   command=self.save_settings).pack()
+
+    def save_settings(self):
+        """시스템 설정 저장"""
+        try:
+            monitoring_phone = self.monitoring_phone_entry.get()
+            homeowner_phone = self.homeowner_phone_entry.get()
+            lock_time = int(self.lock_time_entry.get())
+            alarm_delay = int(self.alarm_delay_entry.get())
+
+            success = self.system.configure_system_setting(
+                monitoring_phone=monitoring_phone,
+                homeowner_phone=homeowner_phone,
+                lock_time=lock_time,
+                alarm_delay=alarm_delay
+            )
+
+            if success:
+                messagebox.showinfo("Success", "System settings saved successfully!")
             else:
-                tk.Label(frame, text=f"[No Image]\n{cam_file}", width=25, height=10, bg="black", fg="white").pack()
-            
-            ttk.Label(frame, text=f"Camera {i+1} - Live").pack()
+                messagebox.showerror("Error", "Failed to save settings.")
+        except ValueError:
+            messagebox.showerror("Error", "Invalid input. Please enter valid numbers for time fields.")
 
-        # 슬라이더 (디자인용)
-        sliders = ttk.Frame(monitor_area)
-        sliders.grid(row=1, column=1, pady=10) # 우측 하단 배치
-        ttk.Label(sliders, text="Zoom").pack(anchor="w")
-        tk.Scale(sliders, from_=0, to=10, orient="horizontal").pack()
-        ttk.Label(sliders, text="Pan").pack(anchor="w")
-        tk.Scale(sliders, from_=0, to=10, orient="horizontal").pack()
+    def _create_password_tab(self, parent):
+        """Common Function 7: Change master password through control panel"""
+        panel = ttk.Frame(parent, padding=20)
+        panel.pack(fill="both", expand=True)
+
+        ttk.Label(panel, text="Change Password", font=("Helvetica", 14, "bold")).pack(pady=(0, 20))
+
+        # 현재 비밀번호
+        ttk.Label(panel, text="Current Password:").pack(anchor="w")
+        self.old_password_entry = ttk.Entry(panel, width=30, show="•")
+        self.old_password_entry.pack(pady=(0, 10))
+
+        # 새 비밀번호
+        ttk.Label(panel, text="New Password:").pack(anchor="w")
+        self.new_password_entry = ttk.Entry(panel, width=30, show="•")
+        self.new_password_entry.pack(pady=(0, 10))
+
+        # 새 비밀번호 확인
+        ttk.Label(panel, text="Confirm New Password:").pack(anchor="w")
+        self.confirm_password_entry = ttk.Entry(panel, width=30, show="•")
+        self.confirm_password_entry.pack(pady=(0, 20))
+
+        ttk.Button(panel, text="Change Password", style="Primary.TButton",
+                   command=self.change_password).pack()
+
+    def change_password(self):
+        """비밀번호 변경"""
+        old_pw = self.old_password_entry.get()
+        new_pw = self.new_password_entry.get()
+        confirm_pw = self.confirm_password_entry.get()
+
+        if new_pw != confirm_pw:
+            messagebox.showerror("Error", "New passwords do not match!")
+            return
+
+        if len(new_pw) < 4:
+            messagebox.showerror("Error", "Password must be at least 4 characters long.")
+            return
+
+        # Common Function 7: Change password
+        success = self.system.change_password(old_pw, new_pw)
+
+        if success:
+            messagebox.showinfo("Success", "Password changed successfully!")
+            self.old_password_entry.delete(0, tk.END)
+            self.new_password_entry.delete(0, tk.END)
+            self.confirm_password_entry.delete(0, tk.END)
+        else:
+            messagebox.showerror("Error", "Failed to change password. Please check your current password.")
+
+    def _create_control_tab(self, parent):
+        """시스템 제어 탭"""
+        panel = ttk.Frame(parent, padding=20)
+        panel.pack(fill="both", expand=True)
+
+        ttk.Label(panel, text="System Control", font=("Helvetica", 14, "bold")).pack(pady=(0, 20))
+
+        # 시스템 상태 표시
+        status_frame = ttk.Frame(panel, relief="ridge", padding=10)
+        status_frame.pack(fill="x", pady=(0, 20))
+
+        ttk.Label(status_frame, text="System Status:", font=("Helvetica", 12, "bold")).pack(anchor="w")
+        self.status_text = tk.Text(status_frame, height=6, width=50)
+        self.status_text.pack()
+        self.update_system_status()
+
+        # 제어 버튼들
+        btn_frame = ttk.Frame(panel)
+        btn_frame.pack()
+
+        ttk.Button(btn_frame, text="Reset System", style="Primary.TButton",
+                   command=self.reset_system).pack(side="left", padx=5)
+
+        ttk.Button(btn_frame, text="Refresh Status", style="Primary.TButton",
+                   command=self.update_system_status).pack(side="left", padx=5)
+
+    def update_system_status(self):
+        """시스템 상태 업데이트"""
+        if hasattr(self, 'status_text'):
+            status_info = self.system.get_system_status()
+            status_str = f"""System State: {status_info['state']}
+Authenticated: {status_info['authenticated']}
+Current User: {status_info['current_user'] or 'None'}
+Security Mode: {status_info['security_mode'] or 'N/A'}
+"""
+            self.status_text.delete(1.0, tk.END)
+            self.status_text.insert(1.0, status_str)
+
+    def reset_system(self):
+        """Common Function 6: Reset the system"""
+        result = messagebox.askyesno("Confirm Reset", "Are you sure you want to reset the system?")
+        if result:
+            success = self.system.reset()
+            if success:
+                messagebox.showinfo("Success", "System reset successfully!")
+                self.update_system_status()
+            else:
+                messagebox.showerror("Error", "Failed to reset system.")
