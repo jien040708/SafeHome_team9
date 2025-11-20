@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeHome - Login</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        input[type="text"],
+        input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #5568d3;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            display: none;
+        }
+
+        .message.error {
+            background: #fee;
+            color: #c33;
+            display: block;
+        }
+
+        .message.success {
+            background: #efe;
+            color: #3c3;
+            display: block;
+        }
+
+        .message.info {
+            background: #eef;
+            color: #33c;
+            display: block;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>SafeHome Login</h1>
+
+        <!-- First Password Form -->
+        <div id="firstPasswordForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autofocus>
+            </div>
+
+            <div class="form-group">
+                <label for="firstPassword">First Password</label>
+                <input type="password" id="firstPassword" name="firstPassword" required>
+            </div>
+
+            <button id="firstSubmitBtn" onclick="submitFirstPassword()">
+                Login
+            </button>
+        </div>
+
+        <!-- Second Password Form (Initially Hidden) -->
+        <div id="secondPasswordForm" class="hidden">
+            <div class="form-group">
+                <label for="secondPassword">Second Password</label>
+                <input type="password" id="secondPassword" name="secondPassword" required autofocus>
+            </div>
+
+            <button id="secondSubmitBtn" onclick="submitSecondPassword()">
+                Submit
+            </button>
+        </div>
+
+        <!-- Message Area -->
+        <div id="message" class="message"></div>
+    </div>
+
+    <script>
+        // Enter key handling
+        document.getElementById('firstPassword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') submitFirstPassword();
+        });
+
+        document.getElementById('username').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') submitFirstPassword();
+        });
+
+        function showMessage(text, type) {
+            const messageEl = document.getElementById('message');
+            messageEl.textContent = text;
+            messageEl.className = 'message ' + type;
+        }
+
+        function hideMessage() {
+            const messageEl = document.getElementById('message');
+            messageEl.style.display = 'none';
+        }
+
+        async function submitFirstPassword() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('firstPassword').value;
+            const btn = document.getElementById('firstSubmitBtn');
+
+            if (!username || !password) {
+                showMessage('Please enter username and password', 'error');
+                return;
+            }
+
+            // Disable button
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>';
+            hideMessage();
+
+            try {
+                const response = await fetch('/api/login/first', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // First password success - Show second password form
+                    showMessage('First password correct! Enter second password.', 'success');
+
+                    setTimeout(() => {
+                        document.getElementById('firstPasswordForm').classList.add('hidden');
+                        document.getElementById('secondPasswordForm').classList.remove('hidden');
+                        document.getElementById('secondPassword').focus();
+                    }, 1000);
+
+                } else {
+                    // Failed
+                    if (data.locked) {
+                        // 계정 잠김 - 서버에서 반환한 메시지 사용 (남은 시간 포함)
+                        showMessage(data.message || 'Account is locked.', 'error');
+                        btn.disabled = true;
+                    } else {
+                        // 비밀번호 틀림 - 남은 시도 횟수 표시
+                        const remaining = data.remaining || 0;
+                        showMessage(
+                            data.message || `Incorrect password. ${remaining} attempts remaining.`,
+                            'error'
+                        );
+                        document.getElementById('firstPassword').value = '';
+                        document.getElementById('firstPassword').focus();
+                        btn.disabled = false;
+                        btn.textContent = 'Login';
+                    }
+                }
+
+            } catch (error) {
+                showMessage('Network error. Please try again.', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Login';
+            }
+        }
+
+        async function submitSecondPassword() {
+            const secondPassword = document.getElementById('secondPassword').value;
+            const btn = document.getElementById('secondSubmitBtn');
+
+            if (!secondPassword) {
+                showMessage('Please enter second password', 'error');
+                return;
+            }
+
+            // Disable button
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>';
+            hideMessage();
+
+            try {
+                const response = await fetch('/api/login/second', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ second_password: secondPassword })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Login success
+                    showMessage('Login successful! Redirecting...', 'success');
+
+                    setTimeout(() => {
+                        window.location.href = data.redirect || '/dashboard';
+                    }, 1000);
+
+                } else {
+                    // Failed
+                    if (data.locked) {
+                        // 계정 잠김 - 서버에서 반환한 메시지 사용 (남은 시간 포함)
+                        showMessage(data.message || 'Account is locked.', 'error');
+                        btn.disabled = true;
+                    } else {
+                        // 비밀번호 틀림 - 남은 시도 횟수 표시
+                        const remaining = data.remaining || 0;
+                        showMessage(
+                            data.message || `Incorrect password. ${remaining} attempts remaining.`,
+                            'error'
+                        );
+                        document.getElementById('secondPassword').value = '';
+                        document.getElementById('secondPassword').focus();
+                        btn.disabled = false;
+                        btn.textContent = 'Submit';
+                    }
+                }
+
+            } catch (error) {
+                showMessage('Network error. Please try again.', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Submit';
+            }
+        }
+
+        // Add Enter key handling for second password
+        setTimeout(() => {
+            const secondPasswordInput = document.getElementById('secondPassword');
+            if (secondPasswordInput) {
+                secondPasswordInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') submitSecondPassword();
+                });
+            }
+        }, 100);
+    </script>
+</body>
+</html>

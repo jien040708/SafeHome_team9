@@ -49,24 +49,43 @@ class System:
     # ========================================
     def login(self, username: str, password: str, interface: str = 'control_panel') -> bool:
         """
-        제어 패널 또는 웹 브라우저를 통한 로그인
+        제어 패널 또는 웹 브라우저를 통한 로그인 (하위 호환용)
         :param username: 사용자 ID
         :param password: 비밀번호
         :param interface: 'control_panel' or 'web_browser'
         :return: 로그인 성공 여부
         """
+        result = self.login_with_details(username, password, interface)
+        return result['success']
+
+    def login_with_details(self, username: str, password: str, interface: str = 'control_panel') -> dict:
+        """
+        제어 패널 또는 웹 브라우저를 통한 로그인 (상세 정보 반환)
+        :param username: 사용자 ID
+        :param password: 비밀번호
+        :param interface: 'control_panel' or 'web_browser'
+        :return: 로그인 결과 딕셔너리
+        """
         if self.system_state == SystemState.OFF:
             print("[System] System is off. Please turn on the system first.")
-            return False
+            return {
+                'success': False,
+                'message': 'System is off. Please turn on the system first.',
+                'system_off': True
+            }
 
         if self.system_state == SystemState.LOCKED:
             print("[System] System is locked.")
-            return False
+            return {
+                'success': False,
+                'message': 'System is locked. Please contact administrator.',
+                'system_locked': True
+            }
 
         # LoginManager를 통한 인증
-        success = self.login_manager.login(username, password, interface)
+        result = self.login_manager.login_with_details(username, password, interface)
 
-        if success:
+        if result['success']:
             # 로그 기록
             self.log_manager.log_event(
                 event_type="LOGIN_SUCCESS",
@@ -89,7 +108,7 @@ class System:
             )
             print(f"[System] Login failed for user '{username}'.")
 
-        return success
+        return result
 
     def logout(self):
         """현재 사용자 로그아웃"""
@@ -352,9 +371,9 @@ class System:
         """기본 관리자 계정 생성"""
         from auth.login_interface import LoginInterface
 
-        # admin 계정이 존재하는지 확인
-        login_interface = LoginInterface()
-        if not login_interface.load('admin'):
+        # admin 계정이 존재하는지 확인 (control_panel 인터페이스)
+        login_interface = LoginInterface(user_interface='control_panel')
+        if not login_interface.load('admin', interface_type='control_panel'):
             # admin 계정 생성
             success = self.login_manager.create_user(
                 username='admin',
