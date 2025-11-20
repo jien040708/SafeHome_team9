@@ -1,0 +1,8 @@
+# Python Venv
+.venv/
+# Byte-compiled files
+__pycache__/
+# IDE files
+.vscode/
+# OS files (MacOS)
+.DS_Store
