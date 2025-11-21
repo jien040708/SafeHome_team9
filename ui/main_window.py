@@ -96,34 +96,145 @@ class LoginView(ttk.Frame):
         super().__init__(parent)
         self.system = system
         self.app = app
+        self.is_locked = False
 
         ttk.Label(self, text="SafeHome", style="Title.TLabel").pack(pady=(40, 30))
 
-        panel = ttk.Frame(self, padding=30, relief="groove")
-        panel.pack()
+        self.panel = ttk.Frame(self, padding=30, relief="groove")
+        self.panel.pack()
 
-        ttk.Label(panel, text="LOGIN SAFEHOME SYSTEM", font=("Helvetica", 12, "bold")).pack(pady=(0, 20))
+        ttk.Label(self.panel, text="LOGIN SAFEHOME SYSTEM", font=("Helvetica", 12, "bold")).pack(pady=(0, 20))
 
-        self.user_entry = ttk.Entry(panel, width=30)
-        self.pass_entry = ttk.Entry(panel, width=30, show="•")
+        # Status message label (for showing remaining attempts, etc.)
+        self.status_label = ttk.Label(self.panel, text="", font=("Helvetica", 10), foreground="blue")
+        self.status_label.pack(pady=(0, 10))
 
-        ttk.Label(panel, text="User ID").pack(anchor="w")
+        self.user_entry = ttk.Entry(self.panel, width=30)
+        self.pass_entry = ttk.Entry(self.panel, width=30, show="•")
+
+        ttk.Label(self.panel, text="User ID").pack(anchor="w")
         self.user_entry.pack(pady=(0, 10))
 
-        ttk.Label(panel, text="Password").pack(anchor="w")
+        ttk.Label(self.panel, text="Password").pack(anchor="w")
         self.pass_entry.pack(pady=(0, 20))
 
-        ttk.Button(panel, text="LOGIN", style="Primary.TButton",
-                   command=self.attempt_login).pack()
+        self.login_btn = ttk.Button(self.panel, text="LOGIN", style="Primary.TButton",
+                   command=self.attempt_login)
+        self.login_btn.pack()
+
+        # Bind Enter key to login
+        self.user_entry.bind('<Return>', lambda e: self.attempt_login())
+        self.pass_entry.bind('<Return>', lambda e: self.attempt_login())
 
     def attempt_login(self):
         uid = self.user_entry.get()
         pw = self.pass_entry.get()
+
+        if not uid or not pw:
+            messagebox.showwarning("Input Required", "Please enter both User ID and Password")
+            return
+
         # Common Function 1: Log onto the system through control panel
-        if self.system.login(uid, pw, interface='control_panel'):
+        result = self.system.login_with_details(uid, pw, interface='control_panel')
+
+        if result['success']:
+            # Login successful - unlock UI if it was locked
+            if self.is_locked:
+                self.unlock_control_panel()
+
+            self.status_label.config(text="", foreground="blue")
             self.app.show_page("MainMenu")
         else:
-            messagebox.showerror("Login Failed", "Invalid ID or Password")
+            # Login failed
+            if result.get('locked'):
+                # Account locked - show remaining time
+                remaining_time = result.get('remaining_time', 0)
+
+                if remaining_time > 0:
+                    # 시간 기반 잠금 - 남은 시간 표시
+                    minutes = remaining_time // 60
+                    seconds = remaining_time % 60
+                    time_msg = f"{minutes} minutes {seconds} seconds" if minutes > 0 else f"{seconds} seconds"
+
+                    self.status_label.config(
+                        text=f"Account locked. Try again in {time_msg}",
+                        foreground="red"
+                    )
+                    messagebox.showerror("Account Locked",
+                                       f"{result.get('message', 'Account is locked.')}\n\n"
+                                       f"Please try again in {time_msg}.")
+                else:
+                    # 잠금 직후 또는 시간 정보 없음 - 메시지만 표시 (UI는 잠그지 않음)
+                    self.status_label.config(
+                        text=f"Account locked. Please wait and try again.",
+                        foreground="red"
+                    )
+                    messagebox.showerror("Account Locked",
+                                       f"{result.get('message', 'Account is locked.')}\n\n"
+                                       "Please wait a moment and try again.")
+            elif result.get('system_locked'):
+                # System locked
+                messagebox.showerror("System Locked", result.get('message', 'System is locked.'))
+            elif result.get('system_off'):
+                # System off
+                messagebox.showerror("System Off", result.get('message', 'System is off.'))
+            else:
+                # Incorrect password - show remaining attempts
+                tries = result.get('tries', 0)
+                remaining = result.get('remaining', 0)
+
+                if remaining > 0:
+                    self.status_label.config(
+                        text=f"Login failed. Remaining attempts: {remaining}",
+                        foreground="red"
+                    )
+                    messagebox.showerror("Login Failed",
+                                       f"Incorrect password.\n\n"
+                                       f"Failed attempts: {tries}\n"
+                                       f"Remaining attempts: {remaining}")
+                else:
+                    self.status_label.config(text="", foreground="blue")
+                    messagebox.showerror("Login Failed", result.get('message', 'Login failed'))
+
+            # Clear password field
+            self.pass_entry.delete(0, tk.END)
+            self.pass_entry.focus()
+
+    def lock_control_panel(self):
+        """Lock the control panel UI"""
+        self.is_locked = True
+
+        # Disable input fields
+        self.user_entry.config(state='disabled')
+        self.pass_entry.config(state='disabled')
+        self.login_btn.config(state='disabled')
+
+        # Show lock message
+        self.status_label.config(
+            text="🔒 CONTROL PANEL LOCKED",
+            foreground="red",
+            font=("Helvetica", 12, "bold")
+        )
+
+        print("[LoginView] Control panel locked due to too many failed attempts.")
+
+    def unlock_control_panel(self):
+        """Unlock the control panel UI (for admin use)"""
+        self.is_locked = False
+
+        # Enable input fields
+        self.user_entry.config(state='normal')
+        self.pass_entry.config(state='normal')
+        self.login_btn.config(state='normal')
+
+        # Clear lock message
+        self.status_label.config(text="", foreground="blue", font=("Helvetica", 10))
+
+        # Clear input fields
+        self.user_entry.delete(0, tk.END)
+        self.pass_entry.delete(0, tk.END)
+
+        print("[LoginView] Control panel unlocked.")
 
 
 class MainMenuView(ttk.Frame):

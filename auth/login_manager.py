@@ -20,23 +20,68 @@ class LoginManager:
 
     def login(self, username: str, password: str, interface: str = 'control_panel') -> bool:
         """
-        사용자 로그인 시도
+        사용자 로그인 시도 (하위 호환용 - bool 반환)
         :param username: 사용자 ID
         :param password: 비밀번호
         :param interface: 'control_panel' or 'web_browser'
         :return: 로그인 성공 여부
         """
+        result = self.login_with_details(username, password, interface)
+        return result['success']
+
+    def login_with_details(self, username: str, password: str, interface: str = 'control_panel') -> dict:
+        """
+        사용자 로그인 시도 (상세 정보 반환)
+        :param username: 사용자 ID
+        :param password: 비밀번호
+        :param interface: 'control_panel' or 'web_browser'
+        :return: 로그인 결과 딕셔너리
+        """
+        MAX_ATTEMPTS = 5
+
         # LoginInterface 인스턴스 생성 및 사용자 정보 로드
-        login_interface = LoginInterface()
+        login_interface = LoginInterface(user_interface=interface)
 
-        if not login_interface.load(username):
-            print(f"[LoginManager] User '{username}' does not exist.")
-            return False
+        if not login_interface.load(username, interface_type=interface):
+            print(f"[LoginManager] User '{username}' ({interface}) does not exist.")
+            return {
+                'success': False,
+                'message': 'User not found',
+                'user_exists': False
+            }
 
-        # 계정 잠금 확인
+        # 계정 잠금 확인 및 시간 기반 자동 해제 (웹 브라우저 로그인과 동일한 로직)
         if login_interface.is_locked():
-            print(f"[LoginManager] Account '{username}' is locked due to too many failed attempts.")
-            return False
+            # StorageManager를 통해 사용자 정보 조회 (locked_at 포함)
+            user_data = self.storage.get_user_by_username(username, interface)
+
+            if user_data and user_data.get('is_locked'):
+                # 시간 기반 자동 해제 확인
+                unlock_result = self._check_and_unlock_if_time_passed(user_data, username, interface)
+
+                if unlock_result['still_locked']:
+                    # 아직 잠금 시간이 남아있음
+                    print(f"[LoginManager] Account '{username}' is locked. {unlock_result.get('remaining_time', 0)} seconds remaining.")
+                    return {
+                        'success': False,
+                        'message': unlock_result['message'],
+                        'locked': True,
+                        'tries': login_interface.get_number_of_tries(),
+                        'remaining_time': unlock_result.get('remaining_time', 0)
+                    }
+                else:
+                    # 잠금이 자동 해제됨 - LoginInterface도 다시 로드
+                    login_interface.load(username, interface_type=interface)
+                    print(f"[LoginManager] Account '{username}' ({interface}) automatically unlocked after lock period.")
+            else:
+                # locked_at 정보가 없는 경우 (영구 잠금으로 간주)
+                print(f"[LoginManager] Account '{username}' is locked due to too many failed attempts.")
+                return {
+                    'success': False,
+                    'message': 'Account is locked. Please contact administrator.',
+                    'locked': True,
+                    'tries': login_interface.get_number_of_tries()
+                }
 
         # 자격 증명 검증
         if self.validate_credentials(login_interface, password):
@@ -48,15 +93,49 @@ class LoginManager:
             self.is_authenticated = True
 
             print(f"[LoginManager] User '{username}' logged in successfully via {interface}.")
-            return True
+            return {
+                'success': True,
+                'message': 'Login successful',
+                'username': username,
+                'access_level': login_interface.get_access_level()
+            }
         else:
             # 로그인 실패
             login_interface.increment_tries()
-            login_interface.save()
+            current_tries = login_interface.get_number_of_tries()
+            remaining = MAX_ATTEMPTS - current_tries
 
             print(f"[LoginManager] Login failed for user '{username}'. "
-                  f"Attempts: {login_interface.get_number_of_tries()}")
-            return False
+                  f"Attempts: {current_tries}")
+
+            # increment_tries()가 이미 5회 도달 시 계정을 잠그므로 여기서는 상태만 확인
+            login_interface.save()
+
+            # 5회 도달 시 잠금 메시지 반환 (remaining_time 포함)
+            if current_tries >= MAX_ATTEMPTS:
+                print(f"[LoginManager] Account '{username}' has been locked.")
+
+                # 잠금 시간 계산 (방금 잠김)
+                from config.system_settings import SystemSettings
+                system_settings = SystemSettings()
+                system_settings.load()
+                lock_duration = system_settings.get_system_lock_time()
+
+                return {
+                    'success': False,
+                    'message': 'Account locked due to too many failed attempts',
+                    'locked': True,
+                    'tries': current_tries,
+                    'remaining_time': lock_duration  # 전체 잠금 시간 반환
+                }
+
+            return {
+                'success': False,
+                'message': 'Incorrect password',
+                'tries': current_tries,
+                'remaining': remaining,
+                'locked': False
+            }
 
     def logout(self):
         """현재 사용자 로그아웃"""
@@ -132,8 +211,8 @@ class LoginManager:
         login_interface = LoginInterface(username, password, interface, access_level)
 
         # 중복 확인
-        if login_interface.load(username):
-            print(f"[LoginManager] User '{username}' already exists.")
+        if login_interface.load(username, interface_type=interface):
+            print(f"[LoginManager] User '{username}' ({interface}) already exists.")
             return False
 
         # 비밀번호 검증
@@ -147,6 +226,198 @@ class LoginManager:
         else:
             print(f"[LoginManager] Failed to create user '{username}'.")
             return False
+
+    def validate_first_password(self, username: str, password: str, interface_type: str = 'web_browser') -> dict:
+        """
+        First Password 검증 (웹 로그인용)
+        :param username: 사용자 ID
+        :param password: First Password
+        :param interface_type: 'web_browser' or 'control_panel'
+        :return: 검증 결과 딕셔너리
+        """
+        MAX_ATTEMPTS = 5
+
+        # 사용자 조회
+        user = self.storage.get_user_by_username(username, interface_type)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'User not found'
+            }
+
+        # 계정 잠금 확인 및 시간 기반 자동 해제
+        if user['is_locked']:
+            unlock_result = self._check_and_unlock_if_time_passed(user, username, interface_type)
+            if unlock_result['still_locked']:
+                return {
+                    'success': False,
+                    'message': unlock_result['message'],
+                    'locked': True,
+                    'remaining_time': unlock_result.get('remaining_time', 0)
+                }
+            # 잠금 해제되었으면 계속 진행
+
+        # First password 검증 (password 필드 사용)
+        if password == user['password']:
+            # 성공 - 실패 카운터 리셋
+            self.storage.reset_failed_login_attempts(username, interface_type)
+
+            return {
+                'success': True,
+                'message': 'First password correct'
+            }
+        else:
+            # 실패 - 카운터 증가
+            self.storage.increment_failed_login_attempts(username, interface_type)
+
+            # 현재 실패 횟수 조회
+            user = self.storage.get_user_by_username(username, interface_type)
+            new_count = user['failed_attempts']
+
+            # 5회 도달 시 계정 잠금
+            if new_count >= MAX_ATTEMPTS:
+                self.storage.lock_user_account(username, interface_type)
+                return {
+                    'success': False,
+                    'message': 'Account locked due to too many failed attempts',
+                    'locked': True,
+                    'tries': new_count
+                }
+
+            return {
+                'success': False,
+                'message': 'Incorrect first password',
+                'tries': new_count,
+                'remaining': MAX_ATTEMPTS - new_count
+            }
+
+    def validate_second_password(self, username: str, second_password: str, interface_type: str = 'web_browser') -> dict:
+        """
+        Second Password 검증 (웹 로그인용)
+        :param username: 사용자 ID
+        :param second_password: Second Password
+        :param interface_type: 'web_browser' or 'control_panel'
+        :return: 검증 결과 딕셔너리
+        """
+        MAX_ATTEMPTS = 5
+
+        # 사용자 조회
+        user = self.storage.get_user_by_username(username, interface_type)
+
+        if not user:
+            return {
+                'success': False,
+                'message': 'User not found'
+            }
+
+        # 계정 잠금 확인 및 시간 기반 자동 해제
+        if user['is_locked']:
+            unlock_result = self._check_and_unlock_if_time_passed(user, username, interface_type)
+            if unlock_result['still_locked']:
+                return {
+                    'success': False,
+                    'message': unlock_result['message'],
+                    'locked': True,
+                    'remaining_time': unlock_result.get('remaining_time', 0)
+                }
+            # 잠금 해제되었으면 계속 진행
+
+        # Second password 검증
+        if second_password == user['second_password']:
+            # 성공 - 실패 카운터 리셋 및 로그인 시간 업데이트
+            self.storage.reset_failed_login_attempts(username, interface_type)
+            self.storage.update_last_login_time(username, interface_type)
+
+            # 웹 로그인을 위한 인증 상태 업데이트
+            # Note: 이 메서드는 주로 웹 세션 인증용이므로 self.current_user는 업데이트하지 않음
+
+            return {
+                'success': True,
+                'message': 'Login successful',
+                'username': username
+            }
+        else:
+            # 실패 - 카운터 증가
+            self.storage.increment_failed_login_attempts(username, interface_type)
+
+            # 현재 실패 횟수 조회
+            user = self.storage.get_user_by_username(username, interface_type)
+            new_count = user['failed_attempts']
+
+            # 5회 도달 시 계정 잠금
+            if new_count >= MAX_ATTEMPTS:
+                self.storage.lock_user_account(username, interface_type)
+                return {
+                    'success': False,
+                    'message': 'Account locked due to too many failed attempts',
+                    'locked': True,
+                    'tries': new_count
+                }
+
+            return {
+                'success': False,
+                'message': 'Incorrect second password',
+                'tries': new_count,
+                'remaining': MAX_ATTEMPTS - new_count
+            }
+
+    def _check_and_unlock_if_time_passed(self, user: dict, username: str, interface_type: str) -> dict:
+        """
+        시간 기반 계정 잠금 해제 확인
+        :param user: 사용자 정보 딕셔너리
+        :param username: 사용자 ID
+        :param interface_type: 인터페이스 타입
+        :return: 잠금 상태 정보
+        """
+        from datetime import datetime, timedelta
+        from config.configuration_manager import ConfigurationManager
+
+        # 잠금 시간 확인
+        locked_at = user.get('locked_at')
+        if not locked_at:
+            # locked_at이 없으면 영구 잠금으로 간주
+            return {
+                'still_locked': True,
+                'message': 'Account is locked. Please contact administrator.'
+            }
+
+        try:
+            # 잠금 시작 시간 파싱
+            locked_time = datetime.fromisoformat(locked_at)
+            current_time = datetime.now()
+            elapsed_seconds = (current_time - locked_time).total_seconds()
+
+            # 시스템 설정에서 잠금 시간 가져오기 (데이터베이스에서 직접 로드)
+            from config.system_settings import SystemSettings
+            system_settings = SystemSettings()
+            system_settings.load()  # 데이터베이스에서 최신 설정 로드
+            lock_duration = system_settings.get_system_lock_time()  # 초 단위
+
+            if elapsed_seconds >= lock_duration:
+                # 잠금 시간이 지났으면 자동 해제
+                self.storage.reset_failed_login_attempts(username, interface_type)
+                print(f"[LoginManager] Account '{username}' automatically unlocked after {lock_duration} seconds.")
+                return {
+                    'still_locked': False,
+                    'message': 'Account unlocked automatically'
+                }
+            else:
+                # 아직 잠금 시간이 남음
+                remaining_seconds = int(lock_duration - elapsed_seconds)
+                return {
+                    'still_locked': True,
+                    'message': f'Account is locked. Please try again in {remaining_seconds} seconds.',
+                    'remaining_time': remaining_seconds
+                }
+
+        except (ValueError, AttributeError) as e:
+            print(f"[LoginManager] Error parsing locked_at time: {e}")
+            # 에러 발생 시 영구 잠금으로 간주
+            return {
+                'still_locked': True,
+                'message': 'Account is locked. Please contact administrator.'
+            }
 
     def __repr__(self):
         user = self.current_user.get_username() if self.current_user else 'None'

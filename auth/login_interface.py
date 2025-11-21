@@ -92,35 +92,50 @@ class LoginInterface:
         self._unlock_account()
 
     def _lock_account(self):
-        """계정 잠금"""
-        sql = "UPDATE users SET is_locked = 1, failed_attempts = ? WHERE user_id = ?"
-        self.storage.execute_update(sql, (self.number_of_tries, self.user_id))
-        print(f"[LoginInterface] Account '{self.user_id}' has been locked.")
+        """계정 잠금 (시간 기반 잠금을 위해 locked_at 타임스탬프 기록)"""
+        from datetime import datetime
+        sql = "UPDATE users SET is_locked = 1, failed_attempts = ?, locked_at = ? WHERE user_id = ? AND interface_type = ?"
+        timestamp = datetime.now().isoformat()
+        self.storage.execute_update(sql, (self.number_of_tries, timestamp, self.user_id, self.user_interface))
+        print(f"[LoginInterface] Account '{self.user_id}' ({self.user_interface}) has been locked at {timestamp}.")
 
     def _unlock_account(self):
-        """계정 잠금 해제"""
-        sql = "UPDATE users SET is_locked = 0, failed_attempts = 0 WHERE user_id = ?"
-        self.storage.execute_update(sql, (self.user_id,))
+        """계정 잠금 해제 (내부용 - locked_at도 NULL로 초기화)"""
+        sql = "UPDATE users SET is_locked = 0, failed_attempts = 0, locked_at = NULL WHERE user_id = ? AND interface_type = ?"
+        self.storage.execute_update(sql, (self.user_id, self.user_interface))
+
+    def lock(self):
+        """계정 잠금 (Public 메서드)"""
+        self._lock_account()
+
+    def unlock(self):
+        """계정 잠금 해제 (Public 메서드)"""
+        self.number_of_tries = 0  # 메모리의 카운터도 리셋
+        self._unlock_account()
 
     def is_locked(self) -> bool:
         """계정이 잠겨있는지 확인"""
-        sql = "SELECT is_locked FROM users WHERE user_id = ?"
-        result = self.storage.execute_query(sql, (self.user_id,))
+        sql = "SELECT is_locked FROM users WHERE user_id = ? AND interface_type = ?"
+        result = self.storage.execute_query(sql, (self.user_id, self.user_interface))
         if result and len(result) > 0:
             return bool(result[0]['is_locked'])
         return False
 
-    def load(self, user_id: str) -> bool:
+    def load(self, user_id: str, interface_type: str = None) -> bool:
         """
         데이터베이스에서 사용자 정보 로드
         :param user_id: 로드할 사용자 ID
+        :param interface_type: 인터페이스 타입 (None이면 self.user_interface 사용)
         :return: 성공 여부
         """
+        # interface_type이 지정되지 않으면 현재 인스턴스의 user_interface 사용
+        interface = interface_type if interface_type else self.user_interface
+
         sql = """
             SELECT user_id, password, interface_type, access_level, failed_attempts, is_locked
-            FROM users WHERE user_id = ?
+            FROM users WHERE user_id = ? AND interface_type = ?
         """
-        result = self.storage.execute_query(sql, (user_id,))
+        result = self.storage.execute_query(sql, (user_id, interface))
 
         if result and len(result) > 0:
             row = result[0]
@@ -131,7 +146,7 @@ class LoginInterface:
             self.number_of_tries = row['failed_attempts']
             return True
         else:
-            print(f"[LoginInterface] User '{user_id}' not found.")
+            print(f"[LoginInterface] User '{user_id}' ({interface}) not found.")
             return False
 
     def save(self) -> bool:
@@ -139,46 +154,45 @@ class LoginInterface:
         현재 사용자 정보를 데이터베이스에 저장 (INSERT or UPDATE)
         :return: 성공 여부
         """
-        # 기존 사용자 확인
-        check_sql = "SELECT user_id FROM users WHERE user_id = ?"
-        result = self.storage.execute_query(check_sql, (self.user_id,))
+        # 기존 사용자 확인 (복합 PRIMARY KEY 고려)
+        check_sql = "SELECT user_id FROM users WHERE user_id = ? AND interface_type = ?"
+        result = self.storage.execute_query(check_sql, (self.user_id, self.user_interface))
 
         if result and len(result) > 0:
             # UPDATE
             sql = """
                 UPDATE users
-                SET password = ?, interface_type = ?, access_level = ?,
-                    failed_attempts = ?
-                WHERE user_id = ?
+                SET password = ?, access_level = ?, failed_attempts = ?
+                WHERE user_id = ? AND interface_type = ?
             """
             rows = self.storage.execute_update(
                 sql,
-                (self.password, self.user_interface, self.access_level,
-                 self.number_of_tries, self.user_id)
+                (self.password, self.access_level, self.number_of_tries,
+                 self.user_id, self.user_interface)
             )
         else:
             # INSERT
             sql = """
-                INSERT INTO users (user_id, password, interface_type, access_level, failed_attempts)
+                INSERT INTO users (user_id, interface_type, password, access_level, failed_attempts)
                 VALUES (?, ?, ?, ?, ?)
             """
             rows = self.storage.execute_update(
                 sql,
-                (self.user_id, self.password, self.user_interface,
+                (self.user_id, self.user_interface, self.password,
                  self.access_level, self.number_of_tries)
             )
 
         if rows > 0:
-            print(f"[LoginInterface] User '{self.user_id}' saved successfully.")
+            print(f"[LoginInterface] User '{self.user_id}' ({self.user_interface}) saved successfully.")
             return True
         else:
-            print(f"[LoginInterface] Failed to save user '{self.user_id}'.")
+            print(f"[LoginInterface] Failed to save user '{self.user_id}' ({self.user_interface}).")
             return False
 
     def delete(self) -> bool:
         """사용자 삭제"""
-        sql = "DELETE FROM users WHERE user_id = ?"
-        rows = self.storage.execute_update(sql, (self.user_id,))
+        sql = "DELETE FROM users WHERE user_id = ? AND interface_type = ?"
+        rows = self.storage.execute_update(sql, (self.user_id, self.user_interface))
         return rows > 0
 
     def __repr__(self):

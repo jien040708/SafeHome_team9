@@ -63,13 +63,15 @@ class SystemSettings:
 
     def _validate_phone(self, phone: str) -> bool:
         """
-        전화번호 형식 간단 검증
-        실제로는 더 정교한 검증 필요
+        전화번호 형식 검증 (XXX-XXX-XXXX 또는 유연한 형식)
         """
-        # 숫자와 하이픈만 포함되어 있는지 확인
         import re
-        pattern = r'^[\d\-+() ]+$'
-        return bool(re.match(pattern, phone)) and len(phone) >= 3
+        # XXX-XXX-XXXX 형식 또는 최소한 숫자와 하이픈 포함
+        strict_pattern = r'^\d{3}-\d{3}-\d{4}$'  # XXX-XXX-XXXX
+        flexible_pattern = r'^[\d\-+() ]+$'  # 유연한 형식 (국제 전화번호 등)
+
+        return (bool(re.match(strict_pattern, phone)) or
+                (bool(re.match(flexible_pattern, phone)) and len(phone) >= 3))
 
     def load(self) -> bool:
         """

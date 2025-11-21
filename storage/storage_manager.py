@@ -58,15 +58,19 @@ class StorageManager:
     def _initialize_schema(self):
         """데이터베이스 스키마 초기화"""
         schema_sql = """
-        -- Users table (확장)
+        -- Users table (확장) - 복합 PRIMARY KEY 사용
         CREATE TABLE IF NOT EXISTS users (
-            user_id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            interface_type TEXT NOT NULL DEFAULT 'control_panel',
             password TEXT NOT NULL,
-            interface_type TEXT DEFAULT 'control_panel',
+            second_password TEXT,
             access_level INTEGER DEFAULT 1,
             failed_attempts INTEGER DEFAULT 0,
             is_locked BOOLEAN DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            locked_at TEXT,
+            last_login_time TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user_id, interface_type)
         );
 
         -- System settings table
@@ -136,6 +140,26 @@ class StorageManager:
                 self.connection.commit()
                 print("[StorageManager] Default SafeHome modes created.")
 
+            # 기본 사용자 데이터 삽입
+            cursor.execute("SELECT COUNT(*) FROM users")
+            if cursor.fetchone()[0] == 0:
+                users = [
+                    # 관리자 계정 (제어판용)
+                    ('admin', 'control_panel', '1234', None, 10, 0, 0, None, None),
+                    # 일반 사용자 계정 (웹 브라우저용 - 이중 비밀번호)
+                    ('homeowner', 'web_browser', 'first123', 'second456', 1, 0, 0, None, None)
+                ]
+                cursor.executemany("""
+                    INSERT INTO users
+                    (user_id, interface_type, password, second_password, access_level,
+                     failed_attempts, is_locked, locked_at, last_login_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, users)
+                self.connection.commit()
+                print("[StorageManager] Default users created:")
+                print("  - admin (control_panel): password='1234', access_level=10")
+                print("  - homeowner (web_browser): password='first123', second_password='second456', access_level=1")
+
         except sqlite3.Error as e:
             print(f"[StorageManager] Schema initialization error: {e}")
 
@@ -196,3 +220,50 @@ class StorageManager:
         except sqlite3.Error as e:
             print(f"[StorageManager] Get last insert ID error: {e}")
             return -1
+
+    # Web Login Support Methods
+    def get_user_by_username(self, username: str, interface_type: str = 'web_browser') -> Optional[dict]:
+        """사용자 정보 조회 (웹 로그인용)"""
+        sql = "SELECT * FROM users WHERE user_id = ? AND interface_type = ?"
+        result = self.execute_query(sql, (username, interface_type))
+        if result and len(result) > 0:
+            return dict(result[0])
+        return None
+
+    def increment_failed_login_attempts(self, username: str, interface_type: str = 'web_browser') -> bool:
+        """로그인 실패 횟수 증가"""
+        sql = "UPDATE users SET failed_attempts = failed_attempts + 1 WHERE user_id = ? AND interface_type = ?"
+        rows_affected = self.execute_update(sql, (username, interface_type))
+        return rows_affected > 0
+
+    def reset_failed_login_attempts(self, username: str, interface_type: str = 'web_browser') -> bool:
+        """로그인 실패 횟수 리셋 및 잠금 해제"""
+        sql = "UPDATE users SET failed_attempts = 0, is_locked = 0, locked_at = NULL WHERE user_id = ? AND interface_type = ?"
+        rows_affected = self.execute_update(sql, (username, interface_type))
+        return rows_affected > 0
+
+    def lock_user_account(self, username: str, interface_type: str = 'web_browser') -> bool:
+        """계정 잠금 (잠금 시작 시간 기록)"""
+        from datetime import datetime
+        sql = "UPDATE users SET is_locked = 1, locked_at = ? WHERE user_id = ? AND interface_type = ?"
+        timestamp = datetime.now().isoformat()
+        rows_affected = self.execute_update(sql, (timestamp, username, interface_type))
+        return rows_affected > 0
+
+    def update_last_login_time(self, username: str, interface_type: str = 'web_browser') -> bool:
+        """마지막 로그인 시간 업데이트"""
+        from datetime import datetime
+        sql = "UPDATE users SET last_login_time = ? WHERE user_id = ? AND interface_type = ?"
+        timestamp = datetime.now().isoformat()
+        rows_affected = self.execute_update(sql, (timestamp, username, interface_type))
+        return rows_affected > 0
+
+    def create_web_user(self, username: str, first_password: str, second_password: str,
+                        access_level: int = 1) -> bool:
+        """웹 사용자 생성"""
+        sql = """
+        INSERT INTO users (user_id, password, second_password, interface_type, access_level)
+        VALUES (?, ?, ?, 'web_browser', ?)
+        """
+        rows_affected = self.execute_update(sql, (username, first_password, second_password, access_level))
+        return rows_affected > 0

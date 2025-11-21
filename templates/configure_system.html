@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeHome - System Settings</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .navbar {
+            background: #667eea;
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .navbar h1 {
+            font-size: 24px;
+        }
+
+        .navbar .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .navbar button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .navbar button:hover {
+            background: #f0f0f0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+
+        .form-group .hint {
+            display: block;
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group input.error {
+            border-color: #f56565;
+        }
+
+        .form-group .error-message {
+            color: #f56565;
+            font-size: 12px;
+            margin-top: 4px;
+            display: none;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .button-group button {
+            flex: 1;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d0d0d0;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.success {
+            background: #c6f6d5;
+            color: #22543d;
+            border-left: 4px solid #48bb78;
+            display: block;
+        }
+
+        .message.error {
+            background: #fed7d7;
+            color: #742a2a;
+            border-left: 4px solid #f56565;
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>SafeHome - System Settings</h1>
+        <div class="user-info">
+            <span>Welcome, <strong>{{ username }}</strong></span>
+            <button onclick="goToDashboard()">Dashboard</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <a href="/dashboard" class="back-link">&larr; Back to Dashboard</a>
+
+        <div id="loadingMessage" class="loading">
+            <div class="loading-spinner"></div>
+            <p>Loading settings...</p>
+        </div>
+
+        <div id="messageBox" class="message"></div>
+
+        <div class="card" id="settingsCard" style="display: none;">
+            <h2>Configure System Settings</h2>
+            <p style="color: #666; margin-bottom: 30px;">
+                Manage your SafeHome system configuration. All fields are required.
+            </p>
+
+            <form id="settingsForm">
+                <div class="form-group">
+                    <label for="monitoringPhone">Monitoring Service Phone</label>
+                    <input
+                        type="text"
+                        id="monitoringPhone"
+                        name="monitoring_service_phone"
+                        placeholder="XXX-XXX-XXXX"
+                        required
+                    >
+                    <span class="hint">Format: XXX-XXX-XXXX (e.g., 123-456-7890)</span>
+                    <span class="error-message" id="monitoringPhoneError"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="homeownerPhone">Homeowner Phone</label>
+                    <input
+                        type="text"
+                        id="homeownerPhone"
+                        name="homeowner_phone"
+                        placeholder="XXX-XXX-XXXX"
+                        required
+                    >
+                    <span class="hint">Format: XXX-XXX-XXXX (e.g., 098-765-4321)</span>
+                    <span class="error-message" id="homeownerPhoneError"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="lockTime">System Lock Time (seconds)</label>
+                    <input
+                        type="number"
+                        id="lockTime"
+                        name="system_lock_time"
+                        min="1"
+                        placeholder="30"
+                        required
+                    >
+                    <span class="hint">Must be greater than 0</span>
+                    <span class="error-message" id="lockTimeError"></span>
+                </div>
+
+                <div class="form-group">
+                    <label for="alarmDelay">Alarm Delay Time (seconds)</label>
+                    <input
+                        type="number"
+                        id="alarmDelay"
+                        name="alarm_delay_time"
+                        min="0"
+                        placeholder="60"
+                        required
+                    >
+                    <span class="hint">Must be non-negative (0 or greater)</span>
+                    <span class="error-message" id="alarmDelayError"></span>
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="btn-secondary" onclick="cancelEdit()">Cancel</button>
+                    <button type="submit" class="btn-primary" id="saveButton">Update Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let originalSettings = {};
+
+        // 페이지 로드 시 설정 불러오기
+        document.addEventListener('DOMContentLoaded', loadSettings);
+
+        async function loadSettings() {
+            try {
+                const response = await fetch('/api/settings');
+                const data = await response.json();
+
+                if (data.success) {
+                    originalSettings = data.settings;
+                    populateForm(data.settings);
+                    document.getElementById('loadingMessage').style.display = 'none';
+                    document.getElementById('settingsCard').style.display = 'block';
+                } else {
+                    showMessage('Failed to load settings: ' + data.message, 'error');
+                    document.getElementById('loadingMessage').style.display = 'none';
+                }
+            } catch (error) {
+                showMessage('Error loading settings: ' + error.message, 'error');
+                document.getElementById('loadingMessage').style.display = 'none';
+            }
+        }
+
+        function populateForm(settings) {
+            document.getElementById('monitoringPhone').value = settings.monitoring_service_phone || '';
+            document.getElementById('homeownerPhone').value = settings.homeowner_phone || '';
+            document.getElementById('lockTime').value = settings.system_lock_time || '';
+            document.getElementById('alarmDelay').value = settings.alarm_delay_time || '';
+        }
+
+        // 폼 제출 처리
+        document.getElementById('settingsForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            // 클라이언트 측 검증
+            if (!validateForm()) {
+                return;
+            }
+
+            // 버튼 비활성화
+            const saveButton = document.getElementById('saveButton');
+            saveButton.disabled = true;
+            saveButton.textContent = 'Updating...';
+
+            const formData = {
+                monitoring_service_phone: document.getElementById('monitoringPhone').value.trim(),
+                homeowner_phone: document.getElementById('homeownerPhone').value.trim(),
+                system_lock_time: parseInt(document.getElementById('lockTime').value),
+                alarm_delay_time: parseInt(document.getElementById('alarmDelay').value)
+            };
+
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showMessage('Settings updated successfully!', 'success');
+                    originalSettings = data.settings;
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 2000);
+                } else {
+                    if (data.errors && data.errors.length > 0) {
+                        showMessage('Validation failed:\n' + data.errors.join('\n'), 'error');
+                    } else {
+                        showMessage('Failed to update settings: ' + data.message, 'error');
+                    }
+                }
+            } catch (error) {
+                showMessage('Error updating settings: ' + error.message, 'error');
+            } finally {
+                saveButton.disabled = false;
+                saveButton.textContent = 'Update Settings';
+            }
+        });
+
+        function validateForm() {
+            let isValid = true;
+            clearErrors();
+
+            // 전화번호 형식 검증
+            const phonePattern = /^\d{3}-\d{3}-\d{4}$/;
+            const flexiblePhonePattern = /^[\d\-+() ]+$/;
+
+            const monitoringPhone = document.getElementById('monitoringPhone').value.trim();
+            if (!phonePattern.test(monitoringPhone) &&
+                !(flexiblePhonePattern.test(monitoringPhone) && monitoringPhone.length >= 3)) {
+                showFieldError('monitoringPhone', 'Invalid phone format (recommended: XXX-XXX-XXXX)');
+                isValid = false;
+            }
+
+            const homeownerPhone = document.getElementById('homeownerPhone').value.trim();
+            if (!phonePattern.test(homeownerPhone) &&
+                !(flexiblePhonePattern.test(homeownerPhone) && homeownerPhone.length >= 3)) {
+                showFieldError('homeownerPhone', 'Invalid phone format (recommended: XXX-XXX-XXXX)');
+                isValid = false;
+            }
+
+            // 시간 값 검증
+            const lockTime = parseInt(document.getElementById('lockTime').value);
+            if (isNaN(lockTime) || lockTime <= 0) {
+                showFieldError('lockTime', 'Must be greater than 0');
+                isValid = false;
+            }
+
+            const alarmDelay = parseInt(document.getElementById('alarmDelay').value);
+            if (isNaN(alarmDelay) || alarmDelay < 0) {
+                showFieldError('alarmDelay', 'Must be non-negative');
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        function showFieldError(fieldId, message) {
+            const field = document.getElementById(fieldId);
+            const errorElement = document.getElementById(fieldId + 'Error');
+            field.classList.add('error');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+
+        function clearErrors() {
+            const inputs = document.querySelectorAll('input');
+            const errorMessages = document.querySelectorAll('.error-message');
+
+            inputs.forEach(input => input.classList.remove('error'));
+            errorMessages.forEach(msg => {
+                msg.textContent = '';
+                msg.style.display = 'none';
+            });
+        }
+
+        function showMessage(text, type) {
+            const msgBox = document.getElementById('messageBox');
+            msgBox.textContent = text;
+            msgBox.className = 'message ' + type;
+            msgBox.style.display = 'block';
+
+            // 성공 메시지는 자동으로 사라지지 않음
+            if (type === 'error') {
+                setTimeout(() => {
+                    msgBox.style.display = 'none';
+                }, 5000);
+            }
+        }
+
+        function cancelEdit() {
+            if (confirm('Are you sure you want to cancel? Any unsaved changes will be lost.')) {
+                populateForm(originalSettings);
+                clearErrors();
+                showMessage('Changes cancelled', 'error');
+                setTimeout(() => {
+                    document.getElementById('messageBox').style.display = 'none';
+                }, 2000);
+            }
+        }
+
+        function goToDashboard() {
+            window.location.href = '/dashboard';
+        }
+
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = '/logout';
+            }
+        }
+    </script>
+</body>
+</html>
