@@ -12,6 +12,7 @@ from event_logging.log_manager import LogManager
 from config.configuration_manager import ConfigurationManager
 from domain.system_controller import SystemController
 from utils.constants import *
+from domain.device_manager import DeviceManager
 
 
 class SystemState(Enum):
@@ -40,6 +41,9 @@ class System:
         self.log_manager: Optional[LogManager] = None
         self.configuration_manager: Optional[ConfigurationManager] = None
         self.system_controller: Optional[SystemController] = None
+
+        self.device_manager = None
+        self.sensors = []
 
         # UI 참조
         self.ui_app = None
