@@ -140,6 +140,26 @@ class StorageManager:
                 self.connection.commit()
                 print("[StorageManager] Default SafeHome modes created.")
 
+            # 기본 사용자 데이터 삽입
+            cursor.execute("SELECT COUNT(*) FROM users")
+            if cursor.fetchone()[0] == 0:
+                users = [
+                    # 관리자 계정 (제어판용)
+                    ('admin', 'control_panel', '1234', None, 10, 0, 0, None, None),
+                    # 일반 사용자 계정 (웹 브라우저용 - 이중 비밀번호)
+                    ('homeowner', 'web_browser', 'first123', 'second456', 1, 0, 0, None, None)
+                ]
+                cursor.executemany("""
+                    INSERT INTO users
+                    (user_id, interface_type, password, second_password, access_level,
+                     failed_attempts, is_locked, locked_at, last_login_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, users)
+                self.connection.commit()
+                print("[StorageManager] Default users created:")
+                print("  - admin (control_panel): password='1234', access_level=10")
+                print("  - homeowner (web_browser): password='first123', second_password='second456', access_level=1")
+
         except sqlite3.Error as e:
             print(f"[StorageManager] Schema initialization error: {e}")
 
