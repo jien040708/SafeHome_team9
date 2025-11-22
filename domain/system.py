@@ -13,6 +13,7 @@ from config.configuration_manager import ConfigurationManager
 from domain.system_controller import SystemController
 from utils.constants import *
 from domain.device_manager import DeviceManager
+from surveillance.camera_controller import CameraController
 
 
 class SystemState(Enum):
@@ -41,6 +42,7 @@ class System:
         self.log_manager: Optional[LogManager] = None
         self.configuration_manager: Optional[ConfigurationManager] = None
         self.system_controller: Optional[SystemController] = None
+        self.camera_controller: Optional[CameraController] = None
 
         self.device_manager = None
         self.sensors = []
@@ -206,7 +208,10 @@ class System:
             # 5. SystemController 초기화 (기존 로직 활용)
             self.system_controller = SystemController(ui_app=self.ui_app)
 
-            # 6. 기본 관리자 계정 생성 (없으면)
+            # 6. CameraController 초기화
+            self.camera_controller = CameraController()
+
+            # 7. 기본 관리자 계정 생성 (없으면)
             self._initialize_default_user()
 
             # 시스템 시작 로그

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeHome - Pick a Camera</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .navbar {
+            background: #667eea;
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .navbar h1 {
+            font-size: 24px;
+        }
+
+        .navbar .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .navbar button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .navbar button:hover {
+            background: #f0f0f0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .floorplan-container {
+            width: 100%;
+            min-height: 400px;
+            background: #e0e0e0;
+            border: 2px solid #ccc;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .floorplan-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            max-width: 100%;
+        }
+
+        .camera-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .camera-button {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 150px;
+        }
+
+        .camera-button.enabled {
+            background: #667eea;
+            color: white;
+        }
+
+        .camera-button.enabled:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .camera-button.disabled {
+            background: #ccc;
+            color: #666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .error-message {
+            padding: 20px;
+            text-align: center;
+            color: #e53e3e;
+            background: #fed7d7;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .modal-content h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .modal-content button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-secondary {
+            background: #718096;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4a5568;
+        }
+
+        .btn-back {
+            background: #718096;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        .btn-back:hover {
+            background: #4a5568;
+        }
+
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .message.error {
+            background: #fed7d7;
+            color: #742a2a;
+            display: block;
+        }
+
+        .message.success {
+            background: #c6f6d5;
+            color: #22543d;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>SafeHome - Pick a Camera</h1>
+        <div class="user-info">
+            <span>Welcome, <strong>{{ username }}</strong></span>
+            <button onclick="goToSurveillance()">Back</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>Floor Plan</h2>
+            <div id="floorplanContainer" class="floorplan-container">
+                <div id="errorMessage" class="error-message" style="display: none;">
+                    <p>Floor plan image could not be loaded.</p>
+                    <p>Please configure floor plan.</p>
+                </div>
+                <img id="floorplanImage" class="floorplan-image" src="/static/floorplan.png" alt="Floor Plan" 
+                     onerror="handleFloorplanError()">
+            </div>
+            <div class="camera-buttons" id="cameraButtons">
+                <!-- Camera buttons will be inserted here -->
+            </div>
+            <button class="btn-back" onclick="goToSurveillance()">Back to Surveillance</button>
+        </div>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <h3>Camera Password</h3>
+            <div id="passwordMessage" class="message"></div>
+            <input type="password" id="cameraPassword" placeholder="Enter camera password" autofocus>
+            <button class="btn-primary" onclick="submitPassword()">Submit</button>
+            <button class="btn-secondary" onclick="closePasswordModal()">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        let cameras = [];
+        let selectedCameraId = null;
+        let passwordAttempts = {};
+
+        // Load cameras on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadCameras();
+        });
+
+        async function loadCameras() {
+            try {
+                const response = await fetch('/api/cameras');
+                const data = await response.json();
+                
+                if (data.success) {
+                    cameras = data.cameras;
+                    renderCameras();
+                } else {
+                    showError('Failed to load cameras');
+                }
+            } catch (error) {
+                console.error('Error loading cameras:', error);
+                showError('Failed to load cameras');
+            }
+        }
+
+        function renderCameras() {
+            const container = document.getElementById('floorplanContainer');
+            const floorplanImg = document.getElementById('floorplanImage');
+            const cameraButtonsContainer = document.getElementById('cameraButtons');
+            
+            // Clear existing camera buttons
+            cameraButtonsContainer.innerHTML = '';
+
+            // Show floorplan if available
+            if (floorplanImg.complete && floorplanImg.naturalHeight !== 0) {
+                floorplanImg.style.display = 'block';
+            }
+
+            // Add camera buttons below floorplan
+            cameras.forEach(camera => {
+                const button = document.createElement('button');
+                button.className = `camera-button ${camera.enabled ? 'enabled' : 'disabled'}`;
+                button.textContent = `Camera ${camera.id}`;
+                button.disabled = !camera.enabled;
+                button.onclick = () => selectCamera(camera.id);
+                cameraButtonsContainer.appendChild(button);
+            });
+        }
+
+        function handleFloorplanError() {
+            document.getElementById('errorMessage').style.display = 'block';
+            document.getElementById('floorplanImage').style.display = 'none';
+        }
+
+        async function selectCamera(cameraId) {
+            selectedCameraId = cameraId;
+            const camera = cameras.find(c => c.id === cameraId);
+            
+            if (!camera.enabled) {
+                alert('This camera is disabled');
+                return;
+            }
+
+            if (camera.has_password) {
+                showPasswordModal();
+            } else {
+                // No password, go directly to camera view
+                window.location.href = `/camera-view/${cameraId}`;
+            }
+        }
+
+        function showPasswordModal() {
+            document.getElementById('passwordModal').style.display = 'block';
+            document.getElementById('cameraPassword').value = '';
+            document.getElementById('passwordMessage').style.display = 'none';
+            passwordAttempts[selectedCameraId] = passwordAttempts[selectedCameraId] || 0;
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').style.display = 'none';
+            selectedCameraId = null;
+        }
+
+        async function submitPassword() {
+            const password = document.getElementById('cameraPassword').value;
+            if (!password) {
+                showPasswordMessage('Please enter password', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/cameras/${selectedCameraId}/validate-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password: password })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Password validated, go to camera view
+                    window.location.href = `/camera-view/${selectedCameraId}`;
+                } else {
+                    if (data.locked) {
+                        showPasswordMessage(`System locked for ${data.lock_time} seconds`, 'error');
+                        setTimeout(() => {
+                            closePasswordModal();
+                        }, 3000);
+                    } else {
+                        const remaining = data.remaining || 0;
+                        showPasswordMessage(`Incorrect password. ${remaining} attempts remaining.`, 'error');
+                        passwordAttempts[selectedCameraId] = (passwordAttempts[selectedCameraId] || 0) + 1;
+                    }
+                }
+            } catch (error) {
+                console.error('Error validating password:', error);
+                showPasswordMessage('Error validating password', 'error');
+            }
+        }
+
+        function showPasswordMessage(message, type) {
+            const msgEl = document.getElementById('passwordMessage');
+            msgEl.textContent = message;
+            msgEl.className = `message ${type}`;
+            msgEl.style.display = 'block';
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        function goToSurveillance() {
+            window.location.href = '/surveillance';
+        }
+
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = '/logout';
+            }
+        }
+
+        // Close modal on outside click
+        window.onclick = function(event) {
+            const modal = document.getElementById('passwordModal');
+            if (event.target == modal) {
+                closePasswordModal();
+            }
+        }
+
+        // Enter key support
+        document.getElementById('cameraPassword').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                submitPassword();
+            }
+        });
+    </script>
+</body>
+</html>
+

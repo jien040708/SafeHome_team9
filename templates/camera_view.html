@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeHome - Camera View</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .navbar {
+            background: #667eea;
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .navbar h1 {
+            font-size: 24px;
+        }
+
+        .navbar .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .navbar button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .navbar button:hover {
+            background: #f0f0f0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .camera-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-item {
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+
+        .info-item .label {
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .info-item .value {
+            font-size: 18px;
+            color: #333;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .control-buttons button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5568d3;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #e53e3e;
+        }
+
+        .btn-secondary {
+            background: #718096;
+            color: white;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #4a5568;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .btn-primary:disabled {
+            background: #a0a0d0;
+            opacity: 0.5;
+        }
+
+        .btn-success:disabled {
+            background: #8fb8a0;
+            opacity: 0.5;
+        }
+
+        .btn-danger:disabled {
+            background: #d0a0a0;
+            opacity: 0.5;
+        }
+
+        .btn-secondary:disabled {
+            background: #a0a0a0;
+            opacity: 0.5;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .message.success {
+            background: #c6f6d5;
+            color: #22543d;
+            display: block;
+        }
+
+        .message.error {
+            background: #fed7d7;
+            color: #742a2a;
+            display: block;
+        }
+
+        .message.info {
+            background: #bee3f8;
+            color: #2c5282;
+            display: block;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .modal-content h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .modal-content button {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>SafeHome - Camera {{ camera_id }}</h1>
+        <div class="user-info">
+            <span>Welcome, <strong>{{ username }}</strong></span>
+            <button onclick="goToSurveillance()">Back</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>Camera Information</h2>
+            <div class="camera-info" id="cameraInfo">
+                <div class="info-item">
+                    <div class="label">Camera ID</div>
+                    <div class="value">{{ camera_id }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">Status</div>
+                    <div class="value" id="cameraStatus">Loading...</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">Password Protected</div>
+                    <div class="value" id="hasPassword">Loading...</div>
+                </div>
+            </div>
+
+            <div class="control-buttons">
+                <button class="btn-primary" id="viewButton" onclick="openCameraView()">View</button>
+                <button class="btn-success" id="enableButton" onclick="enableCamera()">Enable</button>
+                <button class="btn-danger" id="disableButton" onclick="disableCamera()">Disable</button>
+                <button class="btn-secondary" id="setPasswordButton" onclick="setPassword()">Set Password</button>
+                <button class="btn-secondary" id="deletePasswordButton" onclick="deletePassword()">Delete Password</button>
+            </div>
+
+            <div id="message" class="message"></div>
+        </div>
+    </div>
+
+    <!-- Set Password Modal -->
+    <div id="setPasswordModal" class="modal">
+        <div class="modal-content">
+            <h3>Set Camera Password</h3>
+            <div id="setPasswordMessage" class="message"></div>
+            <input type="password" id="oldPassword" placeholder="Old password (if exists)">
+            <input type="password" id="newPassword" placeholder="New password">
+            <input type="password" id="confirmPassword" placeholder="Confirm new password">
+            <button class="btn-primary" onclick="submitSetPassword()">Set Password</button>
+            <button class="btn-secondary" onclick="closeSetPasswordModal()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Delete Password Modal -->
+    <div id="deletePasswordModal" class="modal">
+        <div class="modal-content">
+            <h3>Delete Camera Password</h3>
+            <div id="deletePasswordMessage" class="message"></div>
+            <input type="password" id="deletePasswordInput" placeholder="Enter current password">
+            <button class="btn-primary" onclick="submitDeletePassword()">Delete Password</button>
+            <button class="btn-secondary" onclick="closeDeletePasswordModal()">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        const cameraId = {{ camera_id }};
+        let cameraInfo = null;
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadCameraInfo();
+        });
+
+        async function loadCameraInfo() {
+            try {
+                const response = await fetch(`/api/cameras/${cameraId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    cameraInfo = data.camera;
+                    updateUI();
+                } else {
+                    showMessage('Failed to load camera information', 'error');
+                }
+            } catch (error) {
+                console.error('Error loading camera info:', error);
+                showMessage('Failed to load camera information', 'error');
+            }
+        }
+
+        function updateUI() {
+            document.getElementById('cameraStatus').textContent = cameraInfo.enabled ? 'Enabled' : 'Disabled';
+            document.getElementById('hasPassword').textContent = cameraInfo.has_password ? 'Yes' : 'No';
+            
+            const viewButton = document.getElementById('viewButton');
+            const enableButton = document.getElementById('enableButton');
+            const disableButton = document.getElementById('disableButton');
+            const deletePasswordButton = document.getElementById('deletePasswordButton');
+            
+            if (cameraInfo.enabled) {
+                viewButton.disabled = false;
+                enableButton.disabled = true;  // Disable when camera is already enabled
+                disableButton.disabled = false;
+            } else {
+                viewButton.disabled = true;
+                enableButton.disabled = false;
+                disableButton.disabled = true;  // Disable when camera is already disabled
+            }
+            
+            // Delete password button: disabled if no password exists
+            deletePasswordButton.disabled = !cameraInfo.has_password;
+        }
+
+        async function openCameraView() {
+            try {
+                const response = await fetch(`/api/cameras/${cameraId}/open-view`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('Camera view window opened', 'success');
+                } else {
+                    showMessage(data.message || 'Failed to open camera view', 'error');
+                }
+            } catch (error) {
+                console.error('Error opening camera view:', error);
+                showMessage('Failed to open camera view', 'error');
+            }
+        }
+
+        async function enableCamera() {
+            try {
+                const response = await fetch(`/api/cameras/${cameraId}/enable`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('Camera enabled', 'success');
+                    await loadCameraInfo();
+                } else {
+                    showMessage(data.message || 'Failed to enable camera', 'error');
+                }
+            } catch (error) {
+                console.error('Error enabling camera:', error);
+                showMessage('Failed to enable camera', 'error');
+            }
+        }
+
+        async function disableCamera() {
+            try {
+                const response = await fetch(`/api/cameras/${cameraId}/disable`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('Camera disabled', 'success');
+                    await loadCameraInfo();
+                } else {
+                    showMessage(data.message || 'Failed to disable camera', 'error');
+                }
+            } catch (error) {
+                console.error('Error disabling camera:', error);
+                showMessage('Failed to disable camera', 'error');
+            }
+        }
+
+        function setPassword() {
+            document.getElementById('setPasswordModal').style.display = 'block';
+            document.getElementById('oldPassword').value = '';
+            document.getElementById('newPassword').value = '';
+            document.getElementById('confirmPassword').value = '';
+            document.getElementById('setPasswordMessage').style.display = 'none';
+        }
+
+        function closeSetPasswordModal() {
+            document.getElementById('setPasswordModal').style.display = 'none';
+        }
+
+        async function submitSetPassword() {
+            const oldPassword = document.getElementById('oldPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            
+            if (!newPassword) {
+                showSetPasswordMessage('Please enter new password', 'error');
+                return;
+            }
+            
+            if (newPassword !== confirmPassword) {
+                showSetPasswordMessage('Passwords do not match', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/cameras/${cameraId}/set-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        old_password: oldPassword,
+                        new_password: newPassword,
+                        confirm_password: confirmPassword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showSetPasswordMessage('Password set successfully', 'success');
+                    setTimeout(() => {
+                        closeSetPasswordModal();
+                        loadCameraInfo();
+                    }, 1500);
+                } else {
+                    showSetPasswordMessage(data.message || 'Failed to set password', 'error');
+                }
+            } catch (error) {
+                console.error('Error setting password:', error);
+                showSetPasswordMessage('Failed to set password', 'error');
+            }
+        }
+
+        function deletePassword() {
+            document.getElementById('deletePasswordModal').style.display = 'block';
+            document.getElementById('deletePasswordInput').value = '';
+            document.getElementById('deletePasswordMessage').style.display = 'none';
+        }
+
+        function closeDeletePasswordModal() {
+            document.getElementById('deletePasswordModal').style.display = 'none';
+        }
+
+        async function submitDeletePassword() {
+            const password = document.getElementById('deletePasswordInput').value;
+            
+            if (!password) {
+                showDeletePasswordMessage('Please enter password', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/cameras/${cameraId}/password`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password: password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showDeletePasswordMessage('Password deleted successfully', 'success');
+                    setTimeout(() => {
+                        closeDeletePasswordModal();
+                        loadCameraInfo();
+                    }, 1500);
+                } else {
+                    showDeletePasswordMessage(data.message || 'Failed to delete password', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting password:', error);
+                showDeletePasswordMessage('Failed to delete password', 'error');
+            }
+        }
+
+        function showMessage(text, type) {
+            const msgEl = document.getElementById('message');
+            msgEl.textContent = text;
+            msgEl.className = `message ${type}`;
+            setTimeout(() => {
+                msgEl.style.display = 'none';
+            }, 3000);
+        }
+
+        function showSetPasswordMessage(text, type) {
+            const msgEl = document.getElementById('setPasswordMessage');
+            msgEl.textContent = text;
+            msgEl.className = `message ${type}`;
+            msgEl.style.display = 'block';
+        }
+
+        function showDeletePasswordMessage(text, type) {
+            const msgEl = document.getElementById('deletePasswordMessage');
+            msgEl.textContent = text;
+            msgEl.className = `message ${type}`;
+            msgEl.style.display = 'block';
+        }
+
+        function goToSurveillance() {
+            window.location.href = '/surveillance';
+        }
+
+        function logout() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = '/logout';
+            }
+        }
+
+        // Close modals on outside click
+        window.onclick = function(event) {
+            const setModal = document.getElementById('setPasswordModal');
+            const deleteModal = document.getElementById('deletePasswordModal');
+            if (event.target == setModal) {
+                closeSetPasswordModal();
+            }
+            if (event.target == deleteModal) {
+                closeDeletePasswordModal();
+            }
+        }
+    </script>
+</body>
+</html>
+
