@@ -63,7 +63,8 @@ def validate_first_password():
                     safehome_system.log_manager.log_event(
                         'INFO',
                         f'First password validation successful for user: {username}',
-                        username
+                        username,
+                        interface_type='web_browser',
                     )
 
                 return jsonify({
@@ -76,7 +77,8 @@ def validate_first_password():
                     safehome_system.log_manager.log_event(
                         'WARNING',
                         f'First password validation failed for user: {username}',
-                        username
+                        username,
+                        interface_type='web_browser',
                     )
                 # 디버깅: 응답 내용 출력
                 print(f"[DEBUG] First password validation result: {result}")
@@ -139,7 +141,8 @@ def validate_second_password():
                     safehome_system.log_manager.log_event(
                         'INFO',
                         f'Web login successful for user: {username}',
-                        username
+                        username,
+                        interface_type='web_browser',
                     )
 
                 return jsonify({
@@ -153,7 +156,8 @@ def validate_second_password():
                     safehome_system.log_manager.log_event(
                         'WARNING',
                         f'Second password validation failed for user: {username}',
-                        username
+                        username,
+                        interface_type='web_browser',
                     )
                 # 디버깅: 응답 내용 출력
                 print(f"[DEBUG] Second password validation result: {result}")
@@ -195,7 +199,7 @@ def logout():
     """로그아웃"""
     username = session.get('username')
     if username and safehome_system and safehome_system.log_manager:
-        safehome_system.log_manager.log_event('INFO', 'Web user logged out', username)
+        safehome_system.log_manager.log_event('INFO', 'Web user logged out', username, interface_type='web_browser')
 
     session.clear()
     return redirect(url_for('login_page'))
@@ -337,7 +341,8 @@ def update_settings():
                     safehome_system.log_manager.log_event(
                         'INFO',
                         'System settings updated via web interface',
-                        username
+                        username,
+                        interface_type='web_browser',
                     )
 
                 return jsonify({
@@ -397,6 +402,384 @@ def status():
         <a href='/'>Back</a>
         """
     return "System offline <a href='/'>Back</a>"
+
+
+def _require_api_login():
+    if not session.get('logged_in'):
+        return jsonify({
+            'success': False,
+            'message': 'Authentication required'
+        }), 401
+    return None
+
+
+def _security_instance():
+    if safehome_system and getattr(safehome_system, "security_system", None):
+        return safehome_system.security_system
+    return None
+
+
+def _security_controller():
+    if safehome_system and getattr(safehome_system, "system_controller", None):
+        return safehome_system.system_controller
+    return None
+
+
+def _configuration_manager():
+    if safehome_system and getattr(safehome_system, "configuration_manager", None):
+        return safehome_system.configuration_manager
+    return None
+
+
+def _build_security_status_payload():
+    """Helper that returns (payload, error_response)."""
+    security_system = _security_instance()
+    if not security_system:
+        return None, (jsonify({
+            'success': False,
+            'message': 'Security system not available'
+        }), 503)
+
+    status = security_system.get_status()
+    if not status:
+        return None, (jsonify({
+            'success': False,
+            'message': 'Security status unavailable'
+        }), 500)
+
+    payload = {
+        'mode': status.mode.name,
+        'alarm_state': status.alarm_state.name,
+        'armed_zones': sorted(list(status.armed_zones)) if status.armed_zones else [],
+        'entry_delay_deadline': status.entry_delay_deadline.isoformat() if status.entry_delay_deadline else None,
+        'monitoring_call_scheduled': status.monitoring_call_scheduled,
+    }
+    return payload, None
+
+
+@app.route('/api/security/status', methods=['GET'])
+def api_security_status():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    status_payload, error = _build_security_status_payload()
+    if error:
+        return error
+    return jsonify({'success': True, 'status': status_payload}), 200
+
+
+@app.route('/api/security/intrusions', methods=['GET'])
+def api_security_intrusions():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    security_system = _security_instance()
+    if not security_system:
+        return jsonify({
+            'success': False,
+            'message': 'Security system not available'
+        }), 503
+
+    limit = request.args.get('limit', default=50, type=int)
+    if limit is None or limit <= 0:
+        limit = 50
+    limit = min(limit, 200)
+
+    records = security_system.get_intrusion_logs()
+    payload = []
+    for record in records[-limit:]:
+        payload.append({
+            'timestamp': record.timestamp.isoformat(),
+            'sensor_id': record.sensor_id,
+            'zone_id': record.zone_id,
+            'sensor_type': record.sensor_type.name if record.sensor_type else None,
+            'mode': record.mode.name,
+            'action': record.action,
+            'status': record.status.name if record.status else None,
+            'details': record.details,
+        })
+
+    return jsonify({'success': True, 'intrusions': payload}), 200
+
+
+@app.route('/api/security/arm', methods=['POST'])
+def api_security_arm():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    controller = _security_controller()
+    if not controller:
+        return jsonify({
+            'success': False,
+            'message': 'Security controller not available'
+        }), 503
+
+    username = session.get('username')
+    if not username:
+        return jsonify({'success': False, 'message': 'User session missing'}), 403
+
+    controller.authenticated_user = username
+
+    data = request.get_json(silent=True) or {}
+    requested_mode = data.get('mode', MODE_AWAY)
+    allowed_modes = {MODE_AWAY, MODE_STAY}
+    if requested_mode not in allowed_modes:
+        return jsonify({
+            'success': False,
+            'message': f'Unsupported arm mode: {requested_mode}'
+        }), 400
+
+    if not controller.set_security_mode(requested_mode):
+        message = controller.last_error_message or 'Unable to arm system'
+        return jsonify({'success': False, 'message': message}), 400
+
+    status_payload, error = _build_security_status_payload()
+    if error:
+        return error
+
+    return jsonify({
+        'success': True,
+        'message': f'System armed in {requested_mode} mode',
+        'status': status_payload
+    }), 200
+
+
+@app.route('/api/security/disarm', methods=['POST'])
+def api_security_disarm():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    controller = _security_controller()
+    if not controller:
+        return jsonify({
+            'success': False,
+            'message': 'Security controller not available'
+        }), 503
+
+    username = session.get('username')
+    if not username:
+        return jsonify({'success': False, 'message': 'User session missing'}), 403
+
+    controller.authenticated_user = username
+
+    if not controller.set_security_mode(MODE_DISARMED):
+        message = controller.last_error_message or 'Unable to disarm system'
+        return jsonify({'success': False, 'message': message}), 400
+
+    status_payload, error = _build_security_status_payload()
+    if error:
+        return error
+
+    return jsonify({
+        'success': True,
+        'message': 'System disarmed',
+        'status': status_payload
+    }), 200
+
+
+@app.route('/api/security/panic', methods=['POST'])
+def api_security_panic():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    security_system = _security_instance()
+    if not security_system:
+        return jsonify({
+            'success': False,
+            'message': 'Security system not available'
+        }), 503
+
+    security_system.trigger_panic()
+
+    if safehome_system and getattr(safehome_system, 'log_manager', None):
+        safehome_system.log_manager.log_event(
+            event_type='PANIC_TRIGGERED',
+            description='Panic alarm triggered via web dashboard',
+            user_id=session.get('username'),
+            interface_type='web_browser',
+        )
+
+    status_payload, error = _build_security_status_payload()
+    if error:
+        return error
+
+    return jsonify({
+        'success': True,
+        'message': 'Panic alarm triggered',
+        'status': status_payload
+    }), 200
+
+
+def _serialize_zones(config):
+    zones = config.refresh_safety_zones()
+    assignments = config.list_sensor_assignments()
+    counts = {}
+    for zone_id in assignments.values():
+        counts[zone_id] = counts.get(zone_id, 0) + 1
+
+    payload = []
+    for zone in zones:
+        payload.append({
+            'zone_id': zone.zone_id,
+            'zone_name': zone.zone_name,
+            'is_armed': zone.is_armed,
+            'sensor_count': counts.get(zone.zone_id, 0),
+        })
+    return payload
+
+
+def _serialize_sensors(config):
+    devices = config.device_manager.load_all_devices()
+    assignments = config.list_sensor_assignments()
+    zone_map = config.get_zone_name_map()
+
+    payload = []
+    for device_id, device_type in devices:
+        zone_id = assignments.get(device_id)
+        payload.append({
+            'device_id': device_id,
+            'device_type': device_type,
+            'zone_id': zone_id,
+            'zone_name': zone_map.get(str(zone_id), str(zone_id)) if zone_id is not None else None,
+        })
+    return payload
+
+
+@app.route('/api/security/zones', methods=['GET'])
+def api_security_zones():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    config = _configuration_manager()
+    if not config:
+        return jsonify({'success': False, 'message': 'Configuration manager unavailable'}), 503
+
+    return jsonify({'success': True, 'zones': _serialize_zones(config)}), 200
+
+
+@app.route('/api/security/zones', methods=['POST'])
+def api_security_create_zone():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    config = _configuration_manager()
+    if not config:
+        return jsonify({'success': False, 'message': 'Configuration manager unavailable'}), 503
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'success': False, 'message': 'Zone name is required'}), 400
+
+    if not config.add_safety_zone(name):
+        return jsonify({'success': False, 'message': 'Failed to create zone'}), 400
+
+    return jsonify({'success': True, 'zones': _serialize_zones(config)}), 201
+
+
+@app.route('/api/security/zones/<int:zone_id>', methods=['PUT'])
+def api_security_update_zone(zone_id: int):
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    config = _configuration_manager()
+    if not config:
+        return jsonify({'success': False, 'message': 'Configuration manager unavailable'}), 503
+
+    data = request.get_json(silent=True) or {}
+    name = data.get('name')
+    if not name:
+        return jsonify({'success': False, 'message': 'Zone name is required'}), 400
+
+    if not config.modify_safety_zone(zone_id, zone_name=name.strip()):
+        return jsonify({'success': False, 'message': 'Zone update failed'}), 400
+
+    return jsonify({'success': True, 'zones': _serialize_zones(config)}), 200
+
+
+@app.route('/api/security/zones/<int:zone_id>', methods=['DELETE'])
+def api_security_delete_zone(zone_id: int):
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    config = _configuration_manager()
+    if not config:
+        return jsonify({'success': False, 'message': 'Configuration manager unavailable'}), 503
+
+    if not config.delete_safety_zone(zone_id):
+        return jsonify({'success': False, 'message': 'Failed to delete zone'}), 400
+
+    return jsonify({'success': True, 'zones': _serialize_zones(config)}), 200
+
+
+@app.route('/api/security/sensors', methods=['GET'])
+def api_security_sensors():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    config = _configuration_manager()
+    if not config:
+        return jsonify({'success': False, 'message': 'Configuration manager unavailable'}), 503
+
+    return jsonify({
+        'success': True,
+        'sensors': _serialize_sensors(config),
+        'zones': _serialize_zones(config)
+    }), 200
+
+
+@app.route('/api/security/assignments', methods=['POST'])
+def api_security_assign_sensor():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    config = _configuration_manager()
+    if not config:
+        return jsonify({'success': False, 'message': 'Configuration manager unavailable'}), 503
+
+    data = request.get_json(silent=True) or {}
+    device_id = data.get('device_id')
+    zone_id = data.get('zone_id')
+
+    if not device_id or zone_id is None:
+        return jsonify({'success': False, 'message': 'device_id and zone_id are required'}), 400
+
+    try:
+        zone_id = int(zone_id)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'zone_id must be numeric'}), 400
+
+    if not config.assign_sensor_to_zone(device_id, zone_id):
+        return jsonify({'success': False, 'message': 'Assignment failed'}), 400
+
+    return jsonify({'success': True, 'sensors': _serialize_sensors(config)}), 200
+
+
+@app.route('/api/security/assignments/<device_id>', methods=['DELETE'])
+def api_security_unassign_sensor(device_id: str):
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    config = _configuration_manager()
+    if not config:
+        return jsonify({'success': False, 'message': 'Configuration manager unavailable'}), 503
+
+    if not config.remove_sensor_assignment(device_id):
+        return jsonify({'success': False, 'message': 'No assignment to remove'}), 400
+
+    return jsonify({'success': True, 'sensors': _serialize_sensors(config)}), 200
 
 # ========================================
 # Surveillance API Endpoints
@@ -822,6 +1205,7 @@ def main():
         MotionDetector("Living Room"),
         Camera("Garden Cam")
     ]
+    safehome_system.sensors = sensors
 
     # Connect Devices to SystemController
     if safehome_system.system_controller:

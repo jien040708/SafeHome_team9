@@ -1,11 +1,54 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+from datetime import datetime
+from typing import Optional
+
 from PIL import Image, ImageTk
 import os
 from utils.constants import *
+from security.interfaces import SecurityEventListener
 
 # 페이지 이름 상수
 PAGES = ("Login", "MainMenu", "Zones", "Modes", "Monitoring")
+
+
+class TkSecurityListener(SecurityEventListener):
+    """Adapter that routes SecuritySystem events to the Tkinter UI."""
+
+    def __init__(self, app: "SafeHomeApp"):
+        self.app = app
+
+    def _run_on_ui(self, callback, *args, **kwargs):
+        if not getattr(self.app, "root", None):
+            return
+        self.app.root.after(0, lambda: callback(*args, **kwargs))
+
+    def on_status_changed(self, status):
+        text = f"{status.mode.name} ({status.alarm_state.name})"
+        self._run_on_ui(self.app.update_status_label, text, status.armed_zones)
+
+    def on_intrusion_logged(self, record):
+        sensor = record.sensor_id or "Unknown sensor"
+        zone = record.zone_id or "Zone ->"
+        timestamp = record.timestamp.strftime("%H:%M:%S")
+        message = f"[{timestamp}] {record.action} at {sensor} ({zone})"
+        self._run_on_ui(self.app.add_log, message)
+        self._run_on_ui(self.app.add_intrusion_log, message)
+
+    def on_entry_delay_started(self, event, deadline):
+        deadline_str = deadline.strftime("%H:%M:%S")
+        msg = f"Entry delay started for {event.sensor_id or 'Unknown'} (until {deadline_str})"
+        self._run_on_ui(self.app.add_log, msg)
+
+    def on_alarm_activated(self, event):
+        sensor = event.sensor_id if event else "Unknown"
+        alert_msg = f"ALARM! Triggered by {sensor}"
+        self._run_on_ui(self.app.show_alert, alert_msg)
+        self._run_on_ui(self.app.add_log, f"Alarm activated ({sensor})")
+
+    def on_alarm_cleared(self, cleared_by: str):
+        message = f"Alarm cleared by {cleared_by}"
+        self._run_on_ui(self.app.add_log, message)
 
 class SafeHomeApp:
     def __init__(self, root, system, sensors):
@@ -32,21 +75,22 @@ class SafeHomeApp:
         container.grid_columnconfigure(0, weight=1)
 
         self.frames = {}
-        self.images = {} # 이미지 참조 유지용
+        self.images = {}  # ->-> -> ->->
+        self.intrusion_logs: list[str] = []
 
-        # 각 페이지 뷰 생성
+        # -> ->-> ->
         for page_name in PAGES:
             cls = globals()[f"{page_name}View"]
-            # app=self를 전달하여 뷰에서 SafeHomeApp 메서드 호출 가능하게 함
             frame = cls(parent=container, system=self.system, sensors=self.sensors, app=self)
             self.frames[page_name] = frame
             frame.grid(row=0, column=0, sticky="nsew")
 
-        # 하단 상태바 생성
+        # -> ->-> ->
         self.create_status_bar()
 
-        # 초기 화면
+        # -> ->
         self.show_page("Login")
+        self._security_tick()
 
     def create_status_bar(self):
         bar = tk.Frame(self.root, bg="black", height=30)
@@ -61,16 +105,26 @@ class SafeHomeApp:
         if hasattr(frame, 'refresh'):
             frame.refresh()
 
-    def update_status_label(self, text):
+    def update_status_label(self, text, armed_zones=None):
         self.status_label.config(text=f"Status: {text}")
-        # Modes 화면의 상태 텍스트도 함께 갱신
+        # Modes ->-> ->-> -> ->
         if "Modes" in self.frames:
-            self.frames["Modes"].update_mode_display(text)
+            self.frames["Modes"].update_mode_display(text, armed_zones)
 
     def add_log(self, message):
         current = self.status_label.cget("text")
         if len(current) > 80: current = current[:80] + "..."
         self.status_label.config(text=f"{current} | {message}")
+
+    def add_intrusion_log(self, message: str):
+        """Store intrusion log entries and refresh Monitoring view."""
+        self.intrusion_logs.append(message)
+        if len(self.intrusion_logs) > 1000:
+            self.intrusion_logs = self.intrusion_logs[-1000:]
+
+        monitoring = self.frames.get("Monitoring")
+        if monitoring and hasattr(monitoring, "update_intrusion_log"):
+            monitoring.update_intrusion_log(self.intrusion_logs)
 
     def show_alert(self, msg):
         messagebox.showwarning("ALARM", msg)
@@ -87,6 +141,17 @@ class SafeHomeApp:
         except Exception as e:
             print(f"Image load error: {e}")
             return None
+
+    def _security_tick(self):
+        """Periodically advance the SecuritySystem, allowing entry delays to expire."""
+        try:
+            if self.system and getattr(self.system, "security_system", None):
+                self.system.security_system.tick(datetime.utcnow())
+        except Exception as exc:
+            print(f"[UI] Security tick error: {exc}")
+        finally:
+            if getattr(self, "root", None):
+                self.root.after(1000, self._security_tick)
 
 
 # --- View Classes (기존 UI 디자인 반영) ---
@@ -262,52 +327,257 @@ class ZonesView(ttk.Frame):
     def __init__(self, parent, system, sensors, app):
         super().__init__(parent)
         self.system = system
+        self.config_manager = system.configuration_manager
+        self.controller = system.system_controller
         self.app = app
         self.sensors = sensors
+        self.sensor_status_labels: dict[str, ttk.Label] = {}
+        self.sensor_zone_labels: dict[str, ttk.Label] = {}
+        self.zone_name_var = tk.StringVar()
+        self.sensor_var = tk.StringVar()
+        self.zone_assign_var = tk.StringVar()
 
-        # 헤더 영역
+        # Header
         header = ttk.Frame(self)
         header.pack(fill="x", pady=10, padx=10)
         ttk.Label(header, text="SafeHome", style="Title.TLabel").pack(side="left")
         ttk.Button(header, text="Back", command=lambda: self.app.show_page("MainMenu")).pack(side="right")
 
-        # 좌측 패널 (센서 제어)
+        # Left navigation
         nav = ttk.Frame(self)
         nav.pack(side="left", fill="y", padx=10, pady=10)
-        
-        # 더미 버튼들 (디자인 유지)
-        for label in ["Add Safety zone", "Update Safety zone", "Delete Safety zone"]:
-            ttk.Button(nav, text=label, style="Primary.TButton").pack(pady=5, fill="x")
 
-        ttk.Label(nav, text="Sensor Simulation", font=("Helvetica", 12, "bold")).pack(pady=(20, 5))
-        
-        # 실제 센서 트리거 버튼 생성
-        for s in self.sensors:
-            f = ttk.Frame(nav)
-            f.pack(fill="x", pady=2)
-            ttk.Label(f, text=s.get_id(), width=15).pack(side="left")
-            ttk.Button(f, text="Trigger", width=8,
-                       command=lambda sensor=s: self.trigger_sensor(sensor)).pack(side="right")
+        zone_frame = ttk.LabelFrame(nav, text="Safety Zones")
+        zone_frame.pack(fill="x", pady=(0, 10))
 
-        # 우측 캔버스 영역 (이미지 적용)
+        self.zone_list = tk.Listbox(zone_frame, height=8)
+        self.zone_list.pack(fill="x", padx=5, pady=5)
+
+        ttk.Label(zone_frame, text="Zone Name").pack(anchor="w", padx=5)
+        ttk.Entry(zone_frame, textvariable=self.zone_name_var).pack(fill="x", padx=5, pady=(0, 5))
+        ttk.Button(zone_frame, text="Add Zone", command=self.add_zone).pack(fill="x", padx=5, pady=2)
+        ttk.Button(zone_frame, text="Rename Selected", command=self.rename_zone).pack(fill="x", padx=5, pady=2)
+        ttk.Button(zone_frame, text="Delete Selected", command=self.delete_zone).pack(fill="x", padx=5, pady=(2, 5))
+
+        assign_frame = ttk.LabelFrame(nav, text="Sensor Assignments")
+        assign_frame.pack(fill="x", pady=(0, 10))
+
+        ttk.Label(assign_frame, text="Sensor").pack(anchor="w", padx=5)
+        self.sensor_combo = ttk.Combobox(assign_frame, textvariable=self.sensor_var, state="readonly")
+        self.sensor_combo.pack(fill="x", padx=5, pady=(0, 5))
+
+        ttk.Label(assign_frame, text="Zone").pack(anchor="w", padx=5)
+        self.zone_combo = ttk.Combobox(assign_frame, textvariable=self.zone_assign_var, state="readonly")
+        self.zone_combo.pack(fill="x", padx=5, pady=(0, 5))
+
+        ttk.Button(assign_frame, text="Assign Sensor to Zone", command=self.assign_sensor).pack(fill="x", padx=5, pady=2)
+        ttk.Button(assign_frame, text="Clear Assignment", command=self.clear_sensor_assignment).pack(fill="x", padx=5, pady=(0, 5))
+        self.assignment_feedback = ttk.Label(assign_frame, text="", foreground="green")
+        self.assignment_feedback.pack(fill="x", padx=5, pady=(0, 5))
+
+        ttk.Label(nav, text="Sensor Simulation", font=("Helvetica", 12, "bold")).pack(pady=(10, 5))
+
+        for sensor in self.sensors:
+            row = ttk.Frame(nav)
+            row.pack(fill="x", pady=2)
+            ttk.Label(row, text=sensor.get_id(), width=14).pack(side="left")
+            status_text = self._get_initial_status(sensor)
+            status_label = ttk.Label(row, text=status_text, width=10)
+            status_label.pack(side="left", padx=(5, 10))
+            self.sensor_status_labels[sensor.get_id()] = status_label
+
+            zone_label = ttk.Label(row, text="Zone: -", width=12, foreground="gray40")
+            zone_label.pack(side="left")
+            self.sensor_zone_labels[sensor.get_id()] = zone_label
+
+            ttk.Button(row, text="Trigger", width=8, command=lambda s=sensor: self.trigger_sensor(s)).pack(side="right")
+
+        # Floorplan
         canvas_frame = tk.Frame(self, bg="white", highlightthickness=2, highlightbackground="black")
         canvas_frame.pack(side="left", padx=20, pady=20, expand=True)
 
-        # [수정 2] floorplan.png 이미지 로드
         self.floor_img = self.app.load_image("floorplan.png", (400, 300))
         if self.floor_img:
             lbl_img = tk.Label(canvas_frame, image=self.floor_img, bg="white")
-            lbl_img.image = self.floor_img # 참조 유지
+            lbl_img.image = self.floor_img
             lbl_img.pack()
         else:
             tk.Label(canvas_frame, text="[Floorplan Image Missing]", bg="white").pack(pady=50)
-            
+
         tk.Label(canvas_frame, text="First Floor Layout", font=("Helvetica", 10, "italic"), bg="white").pack(pady=5)
 
+        self.refresh_zone_list()
+        self.refresh_sensor_assignments()
+
+    def refresh(self):
+        self.refresh_zone_list()
+        self.refresh_sensor_assignments()
+
+    def refresh_zone_list(self):
+        zones = self.config_manager.refresh_safety_zones()
+        self.zone_list.delete(0, tk.END)
+        zone_display = []
+        for zone in zones:
+            display = f"[{zone.zone_id}] {zone.zone_name}"
+            self.zone_list.insert(tk.END, display)
+            zone_display.append(f"{zone.zone_id} - {zone.zone_name}")
+        self.zone_combo['values'] = zone_display
+        if zone_display and not self.zone_assign_var.get():
+            self.zone_combo.current(0)
+
+        devices = self.config_manager.device_manager.load_all_devices()
+        sensor_ids = [device_id for device_id, _ in devices]
+        if sensor_ids and not self.sensor_var.get():
+            self.sensor_combo['values'] = sensor_ids
+            self.sensor_combo.current(0)
+        else:
+            self.sensor_combo['values'] = sensor_ids
+
+    def refresh_sensor_assignments(self):
+        assignments = self.config_manager.list_sensor_assignments()
+        zone_map = self.config_manager.get_zone_name_map()
+
+        for sensor_id, label in self.sensor_zone_labels.items():
+            zone_id = assignments.get(sensor_id)
+            if zone_id is None:
+                label.config(text="Zone: -", foreground="gray40")
+            else:
+                zone_name = zone_map.get(str(zone_id), str(zone_id))
+                label.config(text=f"Zone: {zone_name}", foreground="steelblue")
+
+    def _selected_zone_id(self) -> Optional[int]:
+        if not self.zone_list.curselection():
+            return None
+        raw = self.zone_list.get(self.zone_list.curselection())
+        try:
+            zone_id = int(raw.split(']')[0].strip('['))
+            return zone_id
+        except Exception:
+            return None
+
+    def add_zone(self):
+        name = self.zone_name_var.get().strip()
+        if not name:
+            messagebox.showerror("Input Required", "Enter a zone name.")
+            return
+        if self.config_manager.add_safety_zone(name):
+            self.zone_name_var.set("")
+            self.refresh_zone_list()
+
+    def rename_zone(self):
+        zone_id = self._selected_zone_id()
+        if zone_id is None:
+            messagebox.showerror("Select Zone", "Select a zone to rename.")
+            return
+        name = self.zone_name_var.get().strip()
+        if not name:
+            messagebox.showerror("Input Required", "Enter a new zone name.")
+            return
+        self.config_manager.modify_safety_zone(zone_id, zone_name=name)
+        self.zone_name_var.set("")
+        self.refresh_zone_list()
+
+    def delete_zone(self):
+        zone_id = self._selected_zone_id()
+        if zone_id is None:
+            messagebox.showerror("Select Zone", "Select a zone to delete.")
+            return
+        if messagebox.askyesno("Confirm", "Delete selected zone->"):
+            self.config_manager.delete_safety_zone(zone_id)
+            self.refresh_zone_list()
+            self.refresh_sensor_assignments()
+
+    def assign_sensor(self):
+        sensor_id = self.sensor_var.get()
+        zone_value = self.zone_assign_var.get()
+        if not sensor_id or not zone_value:
+            messagebox.showerror("Input Required", "Select both sensor and zone.")
+            return
+        try:
+            zone_id = int(zone_value.split('-')[0].strip())
+        except Exception:
+            messagebox.showerror("Invalid Zone", "Unable to parse the selected zone.")
+            return
+        if self.config_manager.assign_sensor_to_zone(sensor_id, zone_id):
+            self.assignment_feedback.config(text=f"{sensor_id} -> Zone {zone_id}", foreground="green")
+            self.refresh_sensor_assignments()
+        else:
+            self.assignment_feedback.config(text="Assignment failed", foreground="red")
+
+    def clear_sensor_assignment(self):
+        sensor_id = self.sensor_var.get()
+        if not sensor_id:
+            messagebox.showerror("Input Required", "Select a sensor to clear.")
+            return
+        if self.config_manager.remove_sensor_assignment(sensor_id):
+            self.assignment_feedback.config(text=f"{sensor_id} unassigned", foreground="orange")
+            self.refresh_sensor_assignments()
+        else:
+            self.assignment_feedback.config(text="No assignment to clear", foreground="red")
+
     def trigger_sensor(self, sensor):
-        if "Window" in sensor.get_type(): sensor.set_open()
-        elif "Motion" in sensor.get_type(): sensor.detect_motion()
-        messagebox.showinfo("Sensor", f"{sensor.get_id()} Triggered!")
+        sensor_type = sensor.get_type()
+        status_for_controller = "Triggered"
+
+        current_status = None
+        if hasattr(sensor, "get_status"):
+            try:
+                current_status = sensor.get_status()
+            except Exception:
+                current_status = None
+
+        if "Window" in sensor_type or "Door" in sensor_type:
+            if current_status == STATE_CLOSED and hasattr(sensor, "set_open"):
+                sensor.set_open()
+                status_for_controller = "Open"
+            else:
+                if hasattr(sensor, "set_closed"):
+                    sensor.set_closed()
+                status_for_controller = "Closed"
+        elif "Motion" in sensor_type:
+            if hasattr(sensor, "detect_motion"):
+                sensor.detect_motion()
+            status_for_controller = "Motion Detected"
+        else:
+            if hasattr(sensor, "trigger"):
+                sensor.trigger()
+
+        label = self.sensor_status_labels.get(sensor.get_id())
+        if label:
+            label.config(text=self._status_label_text(sensor))
+
+        if self.controller:
+            try:
+                self.controller.update_sensor_status(sensor.get_id(), sensor_type, status_for_controller)
+            except Exception as exc:
+                print(f"[ZonesView] Failed to forward sensor update: {exc}")
+
+        self.app.add_log(f"{sensor.get_id()} {status_for_controller}")
+        messagebox.showinfo("Sensor", f"{sensor.get_id()} {status_for_controller}!")
+
+    def _get_initial_status(self, sensor):
+        if hasattr(sensor, "get_status"):
+            try:
+                status = sensor.get_status()
+                return "Closed" if status == STATE_CLOSED else status or "Unknown"
+            except Exception:
+                return "Unknown"
+        return "Unknown"
+
+    def _status_label_text(self, sensor):
+        if hasattr(sensor, "get_status"):
+            try:
+                status = sensor.get_status()
+                if status == STATE_CLOSED:
+                    return "Closed"
+                if status == STATE_OPEN:
+                    return "Open"
+                if status == STATE_DETECTED:
+                    return "Motion"
+                return status or "Unknown"
+            except Exception:
+                return "Unknown"
+        return "Unknown"
 
 
 class ModesView(ttk.Frame):
@@ -316,7 +586,7 @@ class ModesView(ttk.Frame):
         self.system = system
         self.controller = system.system_controller
         self.app = app
-        
+
         header = ttk.Frame(self)
         header.pack(fill="x", pady=10, padx=10)
         ttk.Label(header, text="SafeHome", style="Title.TLabel").pack(side="left")
@@ -324,26 +594,32 @@ class ModesView(ttk.Frame):
 
         nav = ttk.Frame(self)
         nav.pack(side="left", fill="y", padx=10, pady=10)
-        
-        # 모드 설정 버튼 (실제 기능 연결)
+
         modes = [("Arm Away", MODE_AWAY), ("Arm Stay", MODE_STAY), ("Disarm", MODE_DISARMED)]
         for label, mode_const in modes:
             ttk.Button(nav, text=label, style="Primary.TButton",
                        command=lambda m=mode_const: self.change_mode(m)).pack(pady=5, fill="x")
-            
-        # 더미 버튼들
         for label in ["Overnight Travel", "Guest Home"]:
             ttk.Button(nav, text=label, style="Primary.TButton").pack(pady=5, fill="x")
-            
-        # 상태 표시 라벨
-        self.mode_display = ttk.Label(nav, text="Current: Disarmed", font=("Helvetica", 14, "bold"), foreground="blue")
-        self.mode_display.pack(pady=20)
 
-        # 우측 캔버스 (이미지 재사용)
+        self.mode_display = ttk.Label(nav, text="Current: Disarmed (IDLE)", font=("Helvetica", 14, "bold"),
+                                      foreground="blue")
+        self.mode_display.pack(pady=(10, 0))
+        self.zones_label = ttk.Label(nav, text="Armed Zones: All", font=("Helvetica", 11), foreground="gray25")
+        self.zones_label.pack(pady=(0, 20))
+
+        indicator_frame = ttk.Frame(nav)
+        indicator_frame.pack(pady=(0, 15))
+        ttk.Label(indicator_frame, text="Zone Indicator", font=("Helvetica", 10, "bold")).pack()
+        self.zone_indicator = tk.Canvas(indicator_frame, width=20, height=20, highlightthickness=0, bg="#d9d9d9")
+        self.zone_indicator.pack()
+        self.zone_indicator_id = self.zone_indicator.create_oval(2, 2, 18, 18, fill="#a0aec0", outline="")
+        self.zone_indicator_text = ttk.Label(indicator_frame, text="No zones armed", foreground="gray40")
+        self.zone_indicator_text.pack()
+
         canvas_frame = tk.Frame(self, bg="white", highlightthickness=2, highlightbackground="black")
         canvas_frame.pack(side="left", padx=20, pady=20, expand=True)
 
-        # [수정 2] floorplan.png 이미지 로드 (크기 조절)
         self.floor_img = self.app.load_image("floorplan.png", (400, 300))
         if self.floor_img:
             lbl_img = tk.Label(canvas_frame, image=self.floor_img, bg="white")
@@ -355,15 +631,43 @@ class ModesView(ttk.Frame):
     def change_mode(self, mode):
         self.controller.set_security_mode(mode)
 
-    def update_mode_display(self, text):
-        # [수정 3] 상태 업데이트 버그 해결 (라벨 텍스트 변경)
+    def update_mode_display(self, text, armed_zones=None):
         self.mode_display.config(text=f"Current: {text}")
-        
-    def refresh(self):
-        # 화면이 열릴 때 최신 상태 반영
-        current_status = self.controller.current_state.get_name()
-        self.update_mode_display(current_status)
+        if hasattr(self, "zones_label"):
+            if armed_zones is None:
+                zone_text = "Unknown"
+                count = 0
+            elif len(armed_zones) == 0:
+                zone_text = "All Zones"
+                count = 0
+            else:
+                zone_map = self.system.configuration_manager.get_zone_name_map()
+                resolved = [zone_map.get(str(zone), str(zone)) for zone in sorted(armed_zones)]
+                zone_text = ", ".join(resolved)
+                count = len(armed_zones)
+            self.zones_label.config(text=f"Armed Zones: {zone_text}")
+            self._update_zone_indicator(count)
 
+    def refresh(self):
+        if hasattr(self.system, "security_system") and self.system.security_system:
+            status = self.system.security_system.get_status()
+            if status:
+                text = f"{status.mode.name} ({status.alarm_state.name})"
+                self.update_mode_display(text, status.armed_zones)
+            else:
+                self.update_mode_display(self.system.security_system.mode.name)
+
+    def _update_zone_indicator(self, armed_count: int):
+        if not hasattr(self, "zone_indicator"):
+            return
+        if armed_count:
+            color = "#f56565"
+            text = f"{armed_count} zone(s) armed"
+        else:
+            color = "#48bb78"
+            text = "No active zones"
+        self.zone_indicator.itemconfig(self.zone_indicator_id, fill=color)
+        self.zone_indicator_text.config(text=text, foreground="black" if armed_count else "gray35")
 
 class MonitoringView(ttk.Frame):
     def __init__(self, parent, system, sensors, app):
@@ -376,24 +680,27 @@ class MonitoringView(ttk.Frame):
         ttk.Label(header, text="SafeHome - Configuration", style="Title.TLabel").pack(side="left")
         ttk.Button(header, text="Back", command=lambda: self.app.show_page("MainMenu")).pack(side="right")
 
-        # 탭 형태로 구성
+        ttk.Label(self, text="Monitoring & Intrusion Log", font=("Helvetica", 16, "bold")).pack(pady=(5, 5))
+
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Tab 1: 시스템 설정 (Common Function 3)
         settings_tab = ttk.Frame(notebook)
         notebook.add(settings_tab, text="System Settings")
         self._create_settings_tab(settings_tab)
 
-        # Tab 2: 비밀번호 변경 (Common Function 7)
         password_tab = ttk.Frame(notebook)
         notebook.add(password_tab, text="Change Password")
         self._create_password_tab(password_tab)
 
-        # Tab 3: 시스템 제어
         control_tab = ttk.Frame(notebook)
         notebook.add(control_tab, text="System Control")
         self._create_control_tab(control_tab)
+
+        ttk.Label(self, text="Intrusion Log", font=("Helvetica", 12, "bold")).pack(pady=(10, 0))
+        self.log_list = tk.Listbox(self, height=12)
+        self.log_list.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+        self.update_intrusion_log(self.app.intrusion_logs)
 
     def _create_settings_tab(self, parent):
         """Common Function 3: Configure system setting"""
@@ -530,6 +837,18 @@ class MonitoringView(ttk.Frame):
         ttk.Button(btn_frame, text="Refresh Status", style="Primary.TButton",
                    command=self.update_system_status).pack(side="left", padx=5)
 
+
+    def update_intrusion_log(self, messages):
+        """Refresh the intrusion log list."""
+        if not hasattr(self, "log_list"):
+            return
+        self.log_list.delete(0, tk.END)
+        if not messages:
+            self.log_list.insert(tk.END, "No intrusion events yet.")
+            return
+        for msg in messages:
+            self.log_list.insert(tk.END, msg)
+
     def update_system_status(self):
         """시스템 상태 업데이트"""
         if hasattr(self, 'status_text'):
@@ -542,9 +861,14 @@ Security Mode: {status_info['security_mode'] or 'N/A'}
             self.status_text.delete(1.0, tk.END)
             self.status_text.insert(1.0, status_str)
 
+    def refresh(self):
+        if hasattr(self.app, "intrusion_logs"):
+            self.update_intrusion_log(self.app.intrusion_logs)
+        self.update_system_status()
+
     def reset_system(self):
         """Common Function 6: Reset the system"""
-        result = messagebox.askyesno("Confirm Reset", "Are you sure you want to reset the system?")
+        result = messagebox.askyesno("Confirm Reset", "Are you sure you want to reset the system->")
         if result:
             success = self.system.reset()
             if success:

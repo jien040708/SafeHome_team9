@@ -171,6 +171,47 @@
             color: #2c5282;
             display: block;
         }
+
+        .intrusion-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .intrusion-table th,
+        .intrusion-table td {
+            padding: 10px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+            font-size: 14px;
+            color: #444;
+        }
+
+        .intrusion-table th {
+            background: #f8fafc;
+            font-weight: 600;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .badge.alarm {
+            background: #f56565;
+        }
+
+        .badge.delay {
+            background: #ed8936;
+        }
+
+        .badge.idle {
+            background: #48bb78;
+        }
     </style>
 </head>
 <body>
@@ -213,6 +254,94 @@
             </div>
         </div>
 
+        <!-- Security Overview Card -->
+        <div class="card">
+            <h2>Security Overview</h2>
+            <p>Live status pulled directly from the UC2 SecuritySystem service.</p>
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="label">Current Mode</div>
+                    <div class="value" id="securityMode">Loading...</div>
+                </div>
+                <div class="status-item">
+                    <div class="label">Alarm State</div>
+                    <div class="value" id="securityAlarm"><span class="badge idle">IDLE</span></div>
+                </div>
+                <div class="status-item">
+                    <div class="label">Entry Delay Deadline</div>
+                    <div class="value" id="entryDelay">Loading...</div>
+                </div>
+                <div class="status-item">
+                    <div class="label">Monitoring Call Scheduled</div>
+                    <div class="value" id="monitoringCall">Loading...</div>
+                </div>
+                <div class="status-item" style="grid-column: 1 / -1;">
+                    <div class="label">Armed Zones</div>
+                    <div class="value" id="armedZones">Loading...</div>
+                </div>
+            </div>
+            <div class="control-buttons">
+                <button class="btn-primary" onclick="refreshSecurityData()">Refresh Security Data</button>
+            </div>
+            <h3 style="margin-top: 30px; color: #333;">Recent Intrusion Events</h3>
+            <table class="intrusion-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Sensor</th>
+                        <th>Zone</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="intrusionTableBody">
+                    <tr><td colspan="5">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Zone & Sensor Management -->
+        <div class="card">
+            <h2>Zone &amp; Sensor Management</h2>
+            <p>Keep your UC2 configuration aligned across Tk Control Panel and the web dashboard.</p>
+            <div class="control-buttons" style="align-items:flex-end">
+                <div style="flex:1; min-width:220px;">
+                    <label for="zoneNameInput" style="display:block;font-weight:600;margin-bottom:4px;">New Zone Name</label>
+                    <input id="zoneNameInput" type="text" placeholder="e.g., Upstairs" style="width:100%;padding:10px;border:1px solid #cbd5f5;border-radius:6px;">
+                </div>
+                <button class="btn-primary" onclick="createZone()">Add Zone</button>
+                <button class="btn-success" onclick="refreshZoneSensorManager()">Refresh Zones/Sensors</button>
+            </div>
+            <h3 style="margin-top:25px;color:#333;">Safety Zones</h3>
+            <table class="intrusion-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Sensors Assigned</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="zoneTableBody">
+                    <tr><td colspan="4">Loading zones...</td></tr>
+                </tbody>
+            </table>
+            <h3 style="margin-top:25px;color:#333;">Sensors &amp; Assignments</h3>
+            <table class="intrusion-table">
+                <thead>
+                    <tr>
+                        <th>Sensor</th>
+                        <th>Type</th>
+                        <th>Assigned Zone</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sensorTableBody">
+                    <tr><td colspan="4">Loading sensors...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
         <!-- System Controls Card -->
         <div class="card">
             <h2>System Controls</h2>
@@ -221,6 +350,7 @@
                 <button class="btn-primary" onclick="armAway()">Arm Away</button>
                 <button class="btn-success" onclick="armStay()">Arm Stay</button>
                 <button class="btn-danger" onclick="disarm()">Disarm</button>
+                <button class="btn-danger" style="background:#c53030;" onclick="triggerPanic()">Panic Alarm</button>
             </div>
             <div id="controlMessage" class="message"></div>
         </div>
@@ -258,39 +388,433 @@
         </div>
     </div>
 
-    <script>
-        function showControlMessage(text, type) {
+<script>
+        const securityEls = {
+            mode: document.getElementById('securityMode'),
+            alarm: document.getElementById('securityAlarm'),
+            entryDelay: document.getElementById('entryDelay'),
+            monitoring: document.getElementById('monitoringCall'),
+            zones: document.getElementById('armedZones'),
+            intrusionTable: document.getElementById('intrusionTableBody')
+        };
+        const zoneState = {
+            zones: [],
+            sensors: []
+        };
+
+        function showControlMessage(text, type = 'info') {
             const msgEl = document.getElementById('controlMessage');
             msgEl.textContent = text;
             msgEl.className = 'message ' + type;
+            msgEl.style.display = 'block';
             setTimeout(() => {
                 msgEl.style.display = 'none';
-            }, 3000);
+            }, 4000);
+        }
+
+        function redirectIfUnauthorized(response) {
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return true;
+            }
+            return false;
+        }
+
+        async function callSecurityApi(path, payload = {}) {
+            const response = await fetch(path, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (redirectIfUnauthorized(response)) {
+                throw new Error('Login required');
+            }
+
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (err) {
+                // ignore JSON parse errors
+            }
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Request failed');
+            }
+
+            if (data.status) {
+                updateSecurityStatus(data.status);
+            } else {
+                await refreshSecurityStatus();
+            }
+            await refreshIntrusionLogs();
+            return data;
         }
 
         async function armAway() {
             try {
-                const response = await fetch('/arm');
-                const text = await response.text();
-                showControlMessage('System armed (Away mode)', 'success');
-                setTimeout(() => location.reload(), 1500);
+                await callSecurityApi('/api/security/arm', { mode: 'Away' });
+                showControlMessage('System armed (Away)', 'success');
             } catch (error) {
-                showControlMessage('Failed to arm system', 'error');
+                showControlMessage(error.message, 'error');
             }
         }
 
         async function armStay() {
-            showControlMessage('Stay mode not yet implemented in web interface', 'info');
+            try {
+                await callSecurityApi('/api/security/arm', { mode: 'Stay' });
+                showControlMessage('System armed (Stay)', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
         }
 
         async function disarm() {
             try {
-                const response = await fetch('/disarm');
-                const text = await response.text();
+                await callSecurityApi('/api/security/disarm');
                 showControlMessage('System disarmed', 'success');
-                setTimeout(() => location.reload(), 1500);
             } catch (error) {
-                showControlMessage('Failed to disarm system', 'error');
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function triggerPanic() {
+            if (!confirm('Trigger panic alarm? Monitoring service will be notified.')) {
+                return;
+            }
+            try {
+                await callSecurityApi('/api/security/panic');
+                showControlMessage('Panic alarm activated', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function refreshSecurityStatus() {
+            try {
+                const response = await fetch('/api/security/status');
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Unable to fetch status');
+                }
+                updateSecurityStatus(data.status);
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        function updateSecurityStatus(status) {
+            if (!status) {
+                return;
+            }
+            securityEls.mode.textContent = status.mode;
+            securityEls.entryDelay.textContent = formatEntryDelay(status.entry_delay_deadline);
+            securityEls.monitoring.textContent = status.monitoring_call_scheduled ? 'Scheduled' : 'Not scheduled';
+
+            const zones = status.armed_zones && status.armed_zones.length
+                ? status.armed_zones.join(', ')
+                : 'None';
+            securityEls.zones.textContent = zones;
+
+            const badge = document.createElement('span');
+            badge.classList.add('badge');
+            badge.textContent = status.alarm_state;
+            badge.classList.add(status.alarm_state === 'ALARM_ACTIVE' ? 'alarm'
+                : status.alarm_state === 'ENTRY_DELAY' ? 'delay' : 'idle');
+            securityEls.alarm.innerHTML = '';
+            securityEls.alarm.appendChild(badge);
+        }
+
+        async function refreshIntrusionLogs() {
+            try {
+                const response = await fetch('/api/security/intrusions?limit=15');
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Unable to fetch intrusion logs');
+                }
+                renderIntrusionLogs(data.intrusions);
+            } catch (error) {
+                securityEls.intrusionTable.innerHTML = '';
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.textContent = error.message;
+                row.appendChild(cell);
+                securityEls.intrusionTable.appendChild(row);
+            }
+        }
+
+        function renderIntrusionLogs(records) {
+            securityEls.intrusionTable.innerHTML = '';
+            if (!records.length) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.textContent = 'No intrusion events logged yet.';
+                row.appendChild(cell);
+                securityEls.intrusionTable.appendChild(row);
+                return;
+            }
+
+            for (const record of records.slice().reverse()) {
+                const row = document.createElement('tr');
+                const timestampCell = document.createElement('td');
+                timestampCell.textContent = new Date(record.timestamp).toLocaleString();
+                const sensorCell = document.createElement('td');
+                sensorCell.textContent = record.sensor_id || '-';
+                const zoneCell = document.createElement('td');
+                zoneCell.textContent = record.zone_id || '-';
+                const actionCell = document.createElement('td');
+                actionCell.textContent = record.action;
+                const statusCell = document.createElement('td');
+                statusCell.textContent = record.status || '-';
+
+                row.appendChild(timestampCell);
+                row.appendChild(sensorCell);
+                row.appendChild(zoneCell);
+                row.appendChild(actionCell);
+                row.appendChild(statusCell);
+
+                securityEls.intrusionTable.appendChild(row);
+            }
+        }
+
+        function formatEntryDelay(deadline) {
+            if (!deadline) {
+                return 'No active entry delay';
+            }
+            const target = new Date(deadline);
+            const seconds = Math.max(Math.round((target - Date.now()) / 1000), 0);
+            return `${target.toLocaleTimeString()} (${seconds}s remaining)`;
+        }
+
+        function refreshSecurityData() {
+            refreshSecurityStatus();
+            refreshIntrusionLogs();
+        }
+
+        async function refreshZoneSensorManager() {
+            try {
+                const response = await fetch('/api/security/sensors');
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Unable to load zones/sensors');
+                }
+                zoneState.zones = data.zones || [];
+                zoneState.sensors = data.sensors || [];
+                renderZoneTable();
+                renderSensorTable();
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        function renderZoneTable() {
+            const body = document.getElementById('zoneTableBody');
+            body.innerHTML = '';
+            if (!zoneState.zones.length) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 4;
+                cell.textContent = 'No safety zones configured.';
+                row.appendChild(cell);
+                body.appendChild(row);
+                return;
+            }
+            for (const zone of zoneState.zones) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${zone.zone_id}</td>
+                    <td>${zone.zone_name}</td>
+                    <td>${zone.sensor_count}</td>
+                    <td>
+                        <button class="btn-primary" style="padding:6px 12px;margin-right:8px;" onclick="renameZone(${zone.zone_id})">Rename</button>
+                        <button class="btn-danger" style="padding:6px 12px;" onclick="deleteZone(${zone.zone_id})">Delete</button>
+                    </td>
+                `;
+                body.appendChild(row);
+            }
+        }
+
+        function renderSensorTable() {
+            const body = document.getElementById('sensorTableBody');
+            body.innerHTML = '';
+            if (!zoneState.sensors.length) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 4;
+                cell.textContent = 'No sensors found in Device Manager.';
+                row.appendChild(cell);
+                body.appendChild(row);
+                return;
+            }
+
+            for (const sensor of zoneState.sensors) {
+                const row = document.createElement('tr');
+                const select = document.createElement('select');
+                select.style.padding = '8px';
+                select.onchange = (event) => updateSensorAssignment(sensor.device_id, event.target.value);
+
+                const unassigned = document.createElement('option');
+                unassigned.value = '';
+                unassigned.textContent = 'Unassigned';
+                select.appendChild(unassigned);
+
+                for (const zone of zoneState.zones) {
+                    const opt = document.createElement('option');
+                    opt.value = zone.zone_id;
+                    opt.textContent = zone.zone_name;
+                    select.appendChild(opt);
+                }
+                select.value = sensor.zone_id != null ? sensor.zone_id : '';
+
+                const selectCell = document.createElement('td');
+                selectCell.appendChild(select);
+
+                row.innerHTML = `
+                    <td>${sensor.device_id}</td>
+                    <td>${sensor.device_type}</td>
+                `;
+                row.appendChild(selectCell);
+                const actionCell = document.createElement('td');
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear';
+                clearBtn.className = 'btn-danger';
+                clearBtn.style.padding = '6px 12px';
+                clearBtn.onclick = () => clearSensorAssignment(sensor.device_id);
+                actionCell.appendChild(clearBtn);
+                row.appendChild(actionCell);
+                body.appendChild(row);
+            }
+        }
+
+        async function createZone() {
+            const input = document.getElementById('zoneNameInput');
+            const name = input.value.trim();
+            if (!name) {
+                showControlMessage('Enter a zone name.', 'error');
+                return;
+            }
+            try {
+                const response = await fetch('/api/security/zones', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name})
+                });
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Failed to add zone');
+                }
+                input.value = '';
+                await refreshZoneSensorManager();
+                showControlMessage('Zone created', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function renameZone(zoneId) {
+            const newName = prompt('Enter new zone name:');
+            if (!newName) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/security/zones/${zoneId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: newName})
+                });
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Rename failed');
+                }
+                await refreshZoneSensorManager();
+                showControlMessage('Zone renamed', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function deleteZone(zoneId) {
+            if (!confirm('Delete this zone? Sensors assigned to it will be unassigned.')) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/security/zones/${zoneId}`, {method: 'DELETE'});
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Failed to delete zone');
+                }
+                await refreshZoneSensorManager();
+                showControlMessage('Zone deleted', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function updateSensorAssignment(deviceId, zoneValue) {
+            if (!zoneValue) {
+                await clearSensorAssignment(deviceId);
+                return;
+            }
+            try {
+                const response = await fetch('/api/security/assignments', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({device_id: deviceId, zone_id: parseInt(zoneValue, 10)})
+                });
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Assignment failed');
+                }
+                zoneState.sensors = data.sensors || zoneState.sensors;
+                renderSensorTable();
+                showControlMessage(`Sensor ${deviceId} assigned`, 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function clearSensorAssignment(deviceId) {
+            try {
+                const response = await fetch(`/api/security/assignments/${encodeURIComponent(deviceId)}`, {
+                    method: 'DELETE'
+                });
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Nothing to clear');
+                }
+                zoneState.sensors = data.sensors || zoneState.sensors;
+                renderSensorTable();
+                showControlMessage(`Sensor ${deviceId} unassigned`, 'info');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
             }
         }
 
@@ -307,6 +831,13 @@
         function goToSurveillance() {
             window.location.href = '/surveillance';
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshSecurityData();
+            setInterval(refreshSecurityStatus, 15000);
+            setInterval(refreshIntrusionLogs, 20000);
+            refreshZoneSensorManager();
+        });
     </script>
 </body>
 </html>

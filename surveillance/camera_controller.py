@@ -16,6 +16,9 @@ class CameraController:
         """CameraController 초기화"""
         self._next_camera_id: int = 1
         self._total_camera_number: int = 0
+        self._cameras: Dict[int, Camera] = {}
+        self._camera_info: Dict[int, Dict] = {}
+        self._camera_passwords: Dict[int, str] = {}
         
     def add_camera(self, x_coord: int, y_coord: int) -> bool:
         """
@@ -330,6 +333,22 @@ class CameraController:
         print(f"[CameraController] Password deleted for camera {camera_id}")
         return 0
     
+    def trigger_security_event(self, source: str) -> None:
+        """Capture images from enabled cameras for a security event."""
+        if not getattr(self, '_cameras', None):
+            print('[CameraController] No cameras to trigger')
+            return
+
+        print(f"[CameraController] Security event '{source}' captured by cameras")
+        for camera_id, camera in self._cameras.items():
+            info = self._camera_info.get(camera_id, {})
+            if not info.get('enabled', True):
+                continue
+            try:
+                camera.take_picture()
+            except Exception as exc:
+                print(f'[CameraController] Failed to capture camera {camera_id}: {exc}')
+
     def get_camera_count(self) -> int:
         """
         총 카메라 개수 조회 (헬퍼 메서드)
