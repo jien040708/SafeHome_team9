@@ -412,12 +412,9 @@ class ZonesView(ttk.Frame):
         canvas_frame = tk.Frame(self, bg="white", highlightthickness=2, highlightbackground="black")
         canvas_frame.pack(side="left", padx=20, pady=20, expand=True)
 
-<<<<<<< HEAD
         # [수정 2] floorplan.png 이미지 로드 (프로젝트 루트 기준 경로)
         self.floor_img = self.app.load_image("virtual_device_v3/floorplan.png", (400, 300))
-=======
-        self.floor_img = self.app.load_image("floorplan.png", (400, 300))
->>>>>>> b52fa45246a7f3db20fcabef9ccfdba66ed8fad6
+
         if self.floor_img:
             lbl_img = tk.Label(canvas_frame, image=self.floor_img, bg="white")
             lbl_img.image = self.floor_img
@@ -641,12 +638,9 @@ class ModesView(ttk.Frame):
         canvas_frame = tk.Frame(self, bg="white", highlightthickness=2, highlightbackground="black")
         canvas_frame.pack(side="left", padx=20, pady=20, expand=True)
 
-<<<<<<< HEAD
         # [수정 2] floorplan.png 이미지 로드 (크기 조절)
         self.floor_img = self.app.load_image("virtual_device_v3/floorplan.png", (400, 300))
-=======
-        self.floor_img = self.app.load_image("floorplan.png", (400, 300))
->>>>>>> b52fa45246a7f3db20fcabef9ccfdba66ed8fad6
+
         if self.floor_img:
             lbl_img = tk.Label(canvas_frame, image=self.floor_img, bg="white")
             lbl_img.image = self.floor_img

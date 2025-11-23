@@ -848,17 +848,17 @@ def get_camera_info(camera_id):
             if not camera:
                 return jsonify({'success': False, 'message': 'Camera not found'}), 404
             
-            info = safehome_system.camera_controller._camera_info.get(camera_id, {})
-            has_password = camera_id in safehome_system.camera_controller._camera_passwords
+            # SafeHomeCamera 객체에서 직접 정보 가져오기
+            location = camera.get_location()
             
             return jsonify({
                 'success': True,
                 'camera': {
                     'id': camera_id,
-                    'x': info.get('x', 0),
-                    'y': info.get('y', 0),
-                    'enabled': info.get('enabled', False),
-                    'has_password': has_password
+                    'x': location[0] if len(location) > 0 else 0,
+                    'y': location[1] if len(location) > 1 else 0,
+                    'enabled': camera.is_enabled(),
+                    'has_password': camera.has_password()
                 }
             }), 200
         else:
@@ -940,7 +940,11 @@ def set_camera_password(camera_id):
             return jsonify({'success': False, 'message': 'Passwords do not match'}), 400
         
         # 기존 비밀번호 검증 (있는 경우)
-        has_password = camera_id in safehome_system.camera_controller._camera_passwords
+        camera = safehome_system.camera_controller.get_camera(camera_id)
+        if not camera:
+            return jsonify({'success': False, 'message': 'Camera not found'}), 404
+        
+        has_password = camera.has_password()
         if has_password:
             if not old_password:
                 return jsonify({'success': False, 'message': 'Old password required'}), 400

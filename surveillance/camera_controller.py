@@ -307,11 +307,17 @@ class CameraController:
 
         print(f"[CameraController] Security event '{source}' captured by cameras")
         for camera_id, camera in self._cameras.items():
-            info = self._camera_info.get(camera_id, {})
-            if not info.get('enabled', True):
+            # SafeHomeCamera의 is_enabled() 메서드를 사용하여 활성화 상태 확인
+            if not camera.is_enabled():
                 continue
             try:
-                camera.take_picture()
+                # SafeHomeCamera는 take_picture 메서드가 없을 수 있으므로
+                # display_view를 호출하거나 예외 처리
+                if hasattr(camera, 'take_picture'):
+                    camera.take_picture()
+                else:
+                    # take_picture가 없으면 display_view를 호출하여 이미지 캡처
+                    camera.display_view()
             except Exception as exc:
                 print(f'[CameraController] Failed to capture camera {camera_id}: {exc}')
 
