@@ -300,6 +300,48 @@
             </table>
         </div>
 
+        <!-- Zone & Sensor Management -->
+        <div class="card">
+            <h2>Zone &amp; Sensor Management</h2>
+            <p>Keep your UC2 configuration aligned across Tk Control Panel and the web dashboard.</p>
+            <div class="control-buttons" style="align-items:flex-end">
+                <div style="flex:1; min-width:220px;">
+                    <label for="zoneNameInput" style="display:block;font-weight:600;margin-bottom:4px;">New Zone Name</label>
+                    <input id="zoneNameInput" type="text" placeholder="e.g., Upstairs" style="width:100%;padding:10px;border:1px solid #cbd5f5;border-radius:6px;">
+                </div>
+                <button class="btn-primary" onclick="createZone()">Add Zone</button>
+                <button class="btn-success" onclick="refreshZoneSensorManager()">Refresh Zones/Sensors</button>
+            </div>
+            <h3 style="margin-top:25px;color:#333;">Safety Zones</h3>
+            <table class="intrusion-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Sensors Assigned</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="zoneTableBody">
+                    <tr><td colspan="4">Loading zones...</td></tr>
+                </tbody>
+            </table>
+            <h3 style="margin-top:25px;color:#333;">Sensors &amp; Assignments</h3>
+            <table class="intrusion-table">
+                <thead>
+                    <tr>
+                        <th>Sensor</th>
+                        <th>Type</th>
+                        <th>Assigned Zone</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sensorTableBody">
+                    <tr><td colspan="4">Loading sensors...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
         <!-- System Controls Card -->
         <div class="card">
             <h2>System Controls</h2>
@@ -354,6 +396,10 @@
             monitoring: document.getElementById('monitoringCall'),
             zones: document.getElementById('armedZones'),
             intrusionTable: document.getElementById('intrusionTableBody')
+        };
+        const zoneState = {
+            zones: [],
+            sensors: []
         };
 
         function showControlMessage(text, type = 'info') {
@@ -555,6 +601,223 @@
             refreshIntrusionLogs();
         }
 
+        async function refreshZoneSensorManager() {
+            try {
+                const response = await fetch('/api/security/sensors');
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Unable to load zones/sensors');
+                }
+                zoneState.zones = data.zones || [];
+                zoneState.sensors = data.sensors || [];
+                renderZoneTable();
+                renderSensorTable();
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        function renderZoneTable() {
+            const body = document.getElementById('zoneTableBody');
+            body.innerHTML = '';
+            if (!zoneState.zones.length) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 4;
+                cell.textContent = 'No safety zones configured.';
+                row.appendChild(cell);
+                body.appendChild(row);
+                return;
+            }
+            for (const zone of zoneState.zones) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${zone.zone_id}</td>
+                    <td>${zone.zone_name}</td>
+                    <td>${zone.sensor_count}</td>
+                    <td>
+                        <button class="btn-primary" style="padding:6px 12px;margin-right:8px;" onclick="renameZone(${zone.zone_id})">Rename</button>
+                        <button class="btn-danger" style="padding:6px 12px;" onclick="deleteZone(${zone.zone_id})">Delete</button>
+                    </td>
+                `;
+                body.appendChild(row);
+            }
+        }
+
+        function renderSensorTable() {
+            const body = document.getElementById('sensorTableBody');
+            body.innerHTML = '';
+            if (!zoneState.sensors.length) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 4;
+                cell.textContent = 'No sensors found in Device Manager.';
+                row.appendChild(cell);
+                body.appendChild(row);
+                return;
+            }
+
+            for (const sensor of zoneState.sensors) {
+                const row = document.createElement('tr');
+                const select = document.createElement('select');
+                select.style.padding = '8px';
+                select.onchange = (event) => updateSensorAssignment(sensor.device_id, event.target.value);
+
+                const unassigned = document.createElement('option');
+                unassigned.value = '';
+                unassigned.textContent = 'Unassigned';
+                select.appendChild(unassigned);
+
+                for (const zone of zoneState.zones) {
+                    const opt = document.createElement('option');
+                    opt.value = zone.zone_id;
+                    opt.textContent = zone.zone_name;
+                    select.appendChild(opt);
+                }
+                select.value = sensor.zone_id != null ? sensor.zone_id : '';
+
+                const selectCell = document.createElement('td');
+                selectCell.appendChild(select);
+
+                row.innerHTML = `
+                    <td>${sensor.device_id}</td>
+                    <td>${sensor.device_type}</td>
+                `;
+                row.appendChild(selectCell);
+                const actionCell = document.createElement('td');
+                const clearBtn = document.createElement('button');
+                clearBtn.textContent = 'Clear';
+                clearBtn.className = 'btn-danger';
+                clearBtn.style.padding = '6px 12px';
+                clearBtn.onclick = () => clearSensorAssignment(sensor.device_id);
+                actionCell.appendChild(clearBtn);
+                row.appendChild(actionCell);
+                body.appendChild(row);
+            }
+        }
+
+        async function createZone() {
+            const input = document.getElementById('zoneNameInput');
+            const name = input.value.trim();
+            if (!name) {
+                showControlMessage('Enter a zone name.', 'error');
+                return;
+            }
+            try {
+                const response = await fetch('/api/security/zones', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name})
+                });
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Failed to add zone');
+                }
+                input.value = '';
+                await refreshZoneSensorManager();
+                showControlMessage('Zone created', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function renameZone(zoneId) {
+            const newName = prompt('Enter new zone name:');
+            if (!newName) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/security/zones/${zoneId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: newName})
+                });
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Rename failed');
+                }
+                await refreshZoneSensorManager();
+                showControlMessage('Zone renamed', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function deleteZone(zoneId) {
+            if (!confirm('Delete this zone? Sensors assigned to it will be unassigned.')) {
+                return;
+            }
+            try {
+                const response = await fetch(`/api/security/zones/${zoneId}`, {method: 'DELETE'});
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Failed to delete zone');
+                }
+                await refreshZoneSensorManager();
+                showControlMessage('Zone deleted', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function updateSensorAssignment(deviceId, zoneValue) {
+            if (!zoneValue) {
+                await clearSensorAssignment(deviceId);
+                return;
+            }
+            try {
+                const response = await fetch('/api/security/assignments', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({device_id: deviceId, zone_id: parseInt(zoneValue, 10)})
+                });
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Assignment failed');
+                }
+                zoneState.sensors = data.sensors || zoneState.sensors;
+                renderSensorTable();
+                showControlMessage(`Sensor ${deviceId} assigned`, 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function clearSensorAssignment(deviceId) {
+            try {
+                const response = await fetch(`/api/security/assignments/${encodeURIComponent(deviceId)}`, {
+                    method: 'DELETE'
+                });
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Nothing to clear');
+                }
+                zoneState.sensors = data.sensors || zoneState.sensors;
+                renderSensorTable();
+                showControlMessage(`Sensor ${deviceId} unassigned`, 'info');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
         function logout() {
             if (confirm('Are you sure you want to logout?')) {
                 window.location.href = '/logout';
@@ -573,6 +836,7 @@
             refreshSecurityData();
             setInterval(refreshSecurityStatus, 15000);
             setInterval(refreshIntrusionLogs, 20000);
+            refreshZoneSensorManager();
         });
     </script>
 </body>

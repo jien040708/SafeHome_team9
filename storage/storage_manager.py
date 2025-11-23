@@ -97,7 +97,8 @@ class StorageManager:
             event_type TEXT NOT NULL,
             description TEXT,
             user_id TEXT,
-            FOREIGN KEY (user_id) REFERENCES users(user_id)
+            interface_type TEXT DEFAULT 'control_panel',
+            FOREIGN KEY (user_id, interface_type) REFERENCES users(user_id, interface_type)
         );
 
         -- Safety zones table (향후 확장용)
@@ -129,6 +130,7 @@ class StorageManager:
             cursor = self.connection.cursor()
             cursor.executescript(schema_sql)
             self.connection.commit()
+            self._ensure_event_logs_schema()
 
             # 기본 설정 데이터 삽입
             cursor.execute("SELECT COUNT(*) FROM system_settings")
@@ -238,6 +240,36 @@ class StorageManager:
         except sqlite3.Error as e:
             print(f"[StorageManager] Get last insert ID error: {e}")
             return -1
+
+    def _ensure_event_logs_schema(self) -> None:
+        """Upgrade legacy event_logs tables missing interface_type support."""
+        try:
+            cursor = self.connection.cursor()
+            cursor.execute("PRAGMA table_info(event_logs)")
+            columns = [row["name"] for row in cursor.fetchall()]
+            if "interface_type" in columns:
+                return
+
+            print("[StorageManager] Migrating event_logs table to include interface_type.")
+            cursor.executescript("""
+                ALTER TABLE event_logs RENAME TO event_logs_legacy;
+                CREATE TABLE event_logs (
+                    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_datetime TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    event_type TEXT NOT NULL,
+                    description TEXT,
+                    user_id TEXT,
+                    interface_type TEXT DEFAULT 'control_panel',
+                    FOREIGN KEY (user_id, interface_type) REFERENCES users(user_id, interface_type)
+                );
+                INSERT INTO event_logs (log_id, event_datetime, event_type, description, user_id, interface_type)
+                SELECT log_id, event_datetime, event_type, description, user_id, 'control_panel'
+                FROM event_logs_legacy;
+                DROP TABLE event_logs_legacy;
+            """)
+            self.connection.commit()
+        except sqlite3.Error as exc:
+            print(f"[StorageManager] event_logs migration failed: {exc}")
 
     # Web Login Support Methods
     def get_user_by_username(self, username: str, interface_type: str = 'web_browser') -> Optional[dict]:

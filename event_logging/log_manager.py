@@ -24,14 +24,20 @@ class LogManager:
         :return: 성공 여부
         """
         sql = """
-            INSERT INTO event_logs (event_datetime, event_type, description, user_id)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO event_logs (event_datetime, event_type, description, user_id, interface_type)
+            VALUES (?, ?, ?, ?, ?)
         """
 
         time_str = log.get_date_time().strftime('%Y-%m-%d %H:%M:%S')
         rows = self.storage.execute_update(
             sql,
-            (time_str, log.get_event_type(), log.get_description(), log.get_user_id())
+            (
+                time_str,
+                log.get_event_type(),
+                log.get_description(),
+                log.get_user_id(),
+                log.get_interface_type() or 'control_panel',
+            ),
         )
 
         if rows > 0:
@@ -43,7 +49,13 @@ class LogManager:
             print(f"[LogManager] Failed to save log.")
             return False
 
-    def log_event(self, event_type: str, description: str, user_id: str = None) -> bool:
+    def log_event(
+        self,
+        event_type: str,
+        description: str,
+        user_id: str = None,
+        interface_type: str = "control_panel",
+    ) -> bool:
         """
         새 이벤트를 로깅 (편의 메서드)
         :param event_type: 이벤트 타입
@@ -55,7 +67,8 @@ class LogManager:
             event_type=event_type,
             description=description,
             date_time=datetime.now(),
-            user_id=user_id
+            user_id=user_id,
+            interface_type=interface_type,
         )
         return self.save_log(log)
 
@@ -66,7 +79,7 @@ class LogManager:
         :return: Log 객체 리스트
         """
         sql = """
-            SELECT log_id, event_datetime, event_type, description, user_id
+            SELECT log_id, event_datetime, event_type, description, user_id, interface_type
             FROM event_logs
             ORDER BY event_datetime DESC
             LIMIT ?
@@ -81,7 +94,8 @@ class LogManager:
                     event_type=row['event_type'],
                     description=row['description'],
                     date_time=datetime.strptime(row['event_datetime'], '%Y-%m-%d %H:%M:%S'),
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    interface_type=row['interface_type'],
                 )
                 logs.append(log)
 
@@ -95,7 +109,7 @@ class LogManager:
         :return: Log 객체 리스트
         """
         sql = """
-            SELECT log_id, event_datetime, event_type, description, user_id
+            SELECT log_id, event_datetime, event_type, description, user_id, interface_type
             FROM event_logs
             WHERE event_datetime BETWEEN ? AND ?
             ORDER BY event_datetime DESC
@@ -114,7 +128,8 @@ class LogManager:
                     event_type=row['event_type'],
                     description=row['description'],
                     date_time=datetime.strptime(row['event_datetime'], '%Y-%m-%d %H:%M:%S'),
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    interface_type=row['interface_type'],
                 )
                 logs.append(log)
 
@@ -128,7 +143,7 @@ class LogManager:
         :return: Log 객체 리스트
         """
         sql = """
-            SELECT log_id, event_datetime, event_type, description, user_id
+            SELECT log_id, event_datetime, event_type, description, user_id, interface_type
             FROM event_logs
             WHERE event_type = ?
             ORDER BY event_datetime DESC
@@ -144,7 +159,8 @@ class LogManager:
                     event_type=row['event_type'],
                     description=row['description'],
                     date_time=datetime.strptime(row['event_datetime'], '%Y-%m-%d %H:%M:%S'),
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    interface_type=row['interface_type'],
                 )
                 logs.append(log)
 
@@ -158,7 +174,7 @@ class LogManager:
         :return: Log 객체 리스트
         """
         sql = """
-            SELECT log_id, event_datetime, event_type, description, user_id
+            SELECT log_id, event_datetime, event_type, description, user_id, interface_type
             FROM event_logs
             WHERE user_id = ?
             ORDER BY event_datetime DESC
@@ -174,7 +190,8 @@ class LogManager:
                     event_type=row['event_type'],
                     description=row['description'],
                     date_time=datetime.strptime(row['event_datetime'], '%Y-%m-%d %H:%M:%S'),
-                    user_id=row['user_id']
+                    user_id=row['user_id'],
+                    interface_type=row['interface_type'],
                 )
                 logs.append(log)
 
