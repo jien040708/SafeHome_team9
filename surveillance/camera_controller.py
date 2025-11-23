@@ -18,6 +18,7 @@ class CameraController:
         self._next_camera_id: int = 1
         self._total_camera_number: int = 0
         self._cameras: Dict[int, SafeHomeCamera] = {}
+
         
     def add_camera(self, x_coord: int, y_coord: int) -> bool:
         """
@@ -282,6 +283,38 @@ class CameraController:
         else:
             return 1
     
+    def _delete_camera_password(self, camera_id: int) -> int:
+        """
+        카메라 비밀번호 삭제 (Private 메서드)
+        :param camera_id: 카메라 ID
+        :return: 0=성공, -1=카메라 없음, -2=비밀번호 없음
+        """
+        if camera_id not in self._cameras:
+            return -1
+        
+        if camera_id not in self._camera_passwords:
+            return -2
+        
+        del self._camera_passwords[camera_id]
+        print(f"[CameraController] Password deleted for camera {camera_id}")
+        return 0
+    
+    def trigger_security_event(self, source: str) -> None:
+        """Capture images from enabled cameras for a security event."""
+        if not getattr(self, '_cameras', None):
+            print('[CameraController] No cameras to trigger')
+            return
+
+        print(f"[CameraController] Security event '{source}' captured by cameras")
+        for camera_id, camera in self._cameras.items():
+            info = self._camera_info.get(camera_id, {})
+            if not info.get('enabled', True):
+                continue
+            try:
+                camera.take_picture()
+            except Exception as exc:
+                print(f'[CameraController] Failed to capture camera {camera_id}: {exc}')
+
     def get_camera_count(self) -> int:
         """
         총 카메라 개수 조회 (헬퍼 메서드)
