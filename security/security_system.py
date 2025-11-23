@@ -107,6 +107,17 @@ class SecuritySystem:
         self._sensor_zones[sensor_id] = zone_id
         self._zone_sensors.setdefault(zone_id, set()).add(sensor_id)
 
+    def unassign_sensor(self, sensor_id: str) -> None:
+        """Remove a sensor from any zone tracking."""
+        zone_id = self._sensor_zones.pop(sensor_id, None)
+        if zone_id:
+            sensors = self._zone_sensors.get(zone_id)
+            if sensors:
+                sensors.discard(sensor_id)
+                if not sensors:
+                    self._zone_sensors.pop(zone_id, None)
+        self._notify_status_change()
+
     def remove_zone(self, zone_id: str) -> None:
         """Remove a zone definition."""
         sensors = self._zone_sensors.pop(zone_id, set())

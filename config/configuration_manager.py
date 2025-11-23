@@ -3,7 +3,7 @@ ConfigurationManager - 시스템 전체 설정을 관리하는 모듈.
 SystemSettings, SafeHomeMode, SafetyZone 정보를 총괄 관리하며
 SecuritySystem과의 연동도 담당한다.
 """
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from config.system_settings import SystemSettings
 from storage.storage_manager import StorageManager
@@ -63,6 +63,7 @@ class ConfigurationManager:
         self.current_mode_name: str = MODE_DISARMED
         self.storage = StorageManager()
         self.device_manager = DeviceManager()
+        self._security_system_ref: Optional[SecuritySystem] = None
 
     def initialize_configuration(self) -> bool:
         """
@@ -82,6 +83,11 @@ class ConfigurationManager:
 
         print("[ConfigurationManager] Configuration initialized successfully.")
         return True
+
+    def refresh_safety_zones(self) -> List[SafetyZone]:
+        """Reload the cached safety zones from storage."""
+        self._load_safety_zones()
+        return self.safety_zones
 
     def _load_safehome_modes(self):
         """데이터베이스에서 SafeHome 모드 목록 로드."""
@@ -184,6 +190,7 @@ class ConfigurationManager:
             new_zone = SafetyZone(zone_id, zone_name, False)
             self.safety_zones.append(new_zone)
             print(f"[ConfigurationManager] Safety zone '{zone_name}' added.")
+            self.reconfigure_security_system()
             return True
         else:
             print(f"[ConfigurationManager] Failed to add safety zone '{zone_name}'.")
@@ -201,10 +208,41 @@ class ConfigurationManager:
         if rows > 0:
             self.safety_zones = [z for z in self.safety_zones if z.zone_id != zone_id]
             print(f"[ConfigurationManager] Safety zone {zone_id} deleted.")
+            self.reconfigure_security_system()
             return True
         else:
             print(f"[ConfigurationManager] Failed to delete safety zone {zone_id}.")
             return False
+
+    def list_sensor_assignments(self) -> Dict[str, Optional[int]]:
+        """Return mapping of device IDs to zone IDs (if assigned)."""
+        assignments = self.device_manager.load_device_zone_assignments()
+        return assignments
+
+    def assign_sensor_to_zone(self, device_id: str, zone_id: int) -> bool:
+        """Persist an explicit sensor-zone assignment."""
+        if not self._zone_exists(zone_id):
+            print(f"[ConfigurationManager] Cannot assign sensor: zone {zone_id} missing.")
+            return False
+        success = self.device_manager.assign_device_to_zone(device_id, zone_id)
+        if success:
+            self.reconfigure_security_system()
+        return success
+
+    def remove_sensor_assignment(self, device_id: str) -> bool:
+        """Remove a mapping and refresh the live configuration."""
+        success = self.device_manager.remove_device_zone_assignment(device_id)
+        if success:
+            self.reconfigure_security_system()
+        return success
+
+    def _zone_exists(self, zone_id: int) -> bool:
+        for zone in self.safety_zones:
+            if zone.zone_id == zone_id:
+                return True
+        # Reload once in case cache stale
+        self.refresh_safety_zones()
+        return any(zone.zone_id == zone_id for zone in self.safety_zones)
 
     def get_system_setting(self) -> SystemSettings:
         """현재 시스템 설정 반환."""
@@ -229,25 +267,49 @@ class ConfigurationManager:
                 return zone
         return None
 
+    def get_zone_name_map(self) -> Dict[str, str]:
+        """Return mapping of zone-id strings to display names."""
+        mapping: Dict[str, str] = {}
+        for zone in self.safety_zones:
+            mapping[str(zone.zone_id)] = zone.zone_name
+        return mapping
+
     def configure_security_system(self, security_system: SecuritySystem) -> None:
         """
         SecuritySystem에 센서 및 구역 정보를 등록한다.
         """
         if not security_system:
             return
+        self._security_system_ref = security_system
+        self._apply_security_configuration()
+
+    def reconfigure_security_system(self) -> None:
+        """Re-apply assignments to the currently connected SecuritySystem."""
+        if not self._security_system_ref:
+            return
+        self._apply_security_configuration()
+
+    def _apply_security_configuration(self) -> None:
+        """Register sensors + assignments using the current cache."""
+        security_system = self._security_system_ref
+        if not security_system:
+            return
 
         devices = self.device_manager.load_all_devices()
-        zone_ids = [str(zone.zone_id) for zone in self.safety_zones]
-        next_zone_index = 0
+        assignments = self.device_manager.load_device_zone_assignments()
+
+        if not self.safety_zones:
+            self._load_safety_zones()
 
         for device_id, device_type in devices:
             sensor_type = self._map_device_type(device_type)
             security_system.register_sensor(device_id, sensor_type)
 
-            if zone_ids:
-                zone_id = zone_ids[next_zone_index % len(zone_ids)]
-                security_system.assign_sensor_to_zone(device_id, zone_id)
-                next_zone_index += 1
+            zone_id = assignments.get(device_id)
+            if zone_id is not None:
+                security_system.assign_sensor_to_zone(device_id, str(zone_id))
+            else:
+                security_system.unassign_sensor(device_id)
 
     def _map_device_type(self, device_type: str) -> SensorType:
         """저장된 디바이스 타입 문자열을 SensorType enum으로 변환."""

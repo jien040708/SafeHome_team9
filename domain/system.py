@@ -2,6 +2,7 @@
 System - SafeHome 시스템 메인 클래스
 전체 시스템의 생명주기, 컴포넌트 관리, 7가지 Common Functions 구현
 """
+from __future__ import annotations
 import time
 from datetime import timedelta
 from typing import Optional
@@ -18,6 +19,29 @@ from devices.siren import Siren
 from security.security_system import SecuritySystem
 from security.events import SensorStatus
 from surveillance.camera_controller import CameraController
+
+
+class SystemCameraGateway:
+    """Adapter that forwards SecuritySystem triggers to UC3 components."""
+
+    def __init__(self, system: "System") -> None:
+        self._system = system
+
+    def trigger_all(self, source: str) -> None:
+        controller = getattr(self._system, "system_controller", None)
+        if controller:
+            try:
+                controller.trigger_camera(source)
+            except Exception as exc:  # pragma: no cover - defensive
+                print(f"[SecurityCameraGateway] Controller trigger failed: {exc}")
+
+        camera_controller = getattr(self._system, "camera_controller", None)
+        if camera_controller and hasattr(camera_controller, "trigger_security_event"):
+            try:
+                camera_controller.trigger_security_event(source)
+            except Exception as exc:  # pragma: no cover - defensive
+                print(f"[SecurityCameraGateway] Camera controller trigger failed: {exc}")
+
 
 
 class SystemState(Enum):
@@ -53,6 +77,7 @@ class System:
         self.sensors = []
         self.siren: Optional[Siren] = None
         self.security_listener = None
+        self.camera_gateway = SystemCameraGateway(self)
 
         # UI ??
         self.ui_app = None
@@ -248,6 +273,7 @@ class System:
                 activate_siren=activate_siren,
                 deactivate_siren=deactivate_siren,
                 get_monitored_sensors_state=get_monitored_sensors_state,
+                camera_gateway=self.camera_gateway,
             )
             self.configuration_manager.configure_security_system(self.security_system)
             self._attach_security_listener()

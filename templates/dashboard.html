@@ -171,6 +171,47 @@
             color: #2c5282;
             display: block;
         }
+
+        .intrusion-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .intrusion-table th,
+        .intrusion-table td {
+            padding: 10px;
+            border-bottom: 1px solid #e2e8f0;
+            text-align: left;
+            font-size: 14px;
+            color: #444;
+        }
+
+        .intrusion-table th {
+            background: #f8fafc;
+            font-weight: 600;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .badge.alarm {
+            background: #f56565;
+        }
+
+        .badge.delay {
+            background: #ed8936;
+        }
+
+        .badge.idle {
+            background: #48bb78;
+        }
     </style>
 </head>
 <body>
@@ -213,6 +254,52 @@
             </div>
         </div>
 
+        <!-- Security Overview Card -->
+        <div class="card">
+            <h2>Security Overview</h2>
+            <p>Live status pulled directly from the UC2 SecuritySystem service.</p>
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="label">Current Mode</div>
+                    <div class="value" id="securityMode">Loading...</div>
+                </div>
+                <div class="status-item">
+                    <div class="label">Alarm State</div>
+                    <div class="value" id="securityAlarm"><span class="badge idle">IDLE</span></div>
+                </div>
+                <div class="status-item">
+                    <div class="label">Entry Delay Deadline</div>
+                    <div class="value" id="entryDelay">Loading...</div>
+                </div>
+                <div class="status-item">
+                    <div class="label">Monitoring Call Scheduled</div>
+                    <div class="value" id="monitoringCall">Loading...</div>
+                </div>
+                <div class="status-item" style="grid-column: 1 / -1;">
+                    <div class="label">Armed Zones</div>
+                    <div class="value" id="armedZones">Loading...</div>
+                </div>
+            </div>
+            <div class="control-buttons">
+                <button class="btn-primary" onclick="refreshSecurityData()">Refresh Security Data</button>
+            </div>
+            <h3 style="margin-top: 30px; color: #333;">Recent Intrusion Events</h3>
+            <table class="intrusion-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Sensor</th>
+                        <th>Zone</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="intrusionTableBody">
+                    <tr><td colspan="5">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
         <!-- System Controls Card -->
         <div class="card">
             <h2>System Controls</h2>
@@ -221,6 +308,7 @@
                 <button class="btn-primary" onclick="armAway()">Arm Away</button>
                 <button class="btn-success" onclick="armStay()">Arm Stay</button>
                 <button class="btn-danger" onclick="disarm()">Disarm</button>
+                <button class="btn-danger" style="background:#c53030;" onclick="triggerPanic()">Panic Alarm</button>
             </div>
             <div id="controlMessage" class="message"></div>
         </div>
@@ -258,40 +346,213 @@
         </div>
     </div>
 
-    <script>
-        function showControlMessage(text, type) {
+<script>
+        const securityEls = {
+            mode: document.getElementById('securityMode'),
+            alarm: document.getElementById('securityAlarm'),
+            entryDelay: document.getElementById('entryDelay'),
+            monitoring: document.getElementById('monitoringCall'),
+            zones: document.getElementById('armedZones'),
+            intrusionTable: document.getElementById('intrusionTableBody')
+        };
+
+        function showControlMessage(text, type = 'info') {
             const msgEl = document.getElementById('controlMessage');
             msgEl.textContent = text;
             msgEl.className = 'message ' + type;
+            msgEl.style.display = 'block';
             setTimeout(() => {
                 msgEl.style.display = 'none';
-            }, 3000);
+            }, 4000);
+        }
+
+        function redirectIfUnauthorized(response) {
+            if (response.status === 401) {
+                window.location.href = '/login';
+                return true;
+            }
+            return false;
+        }
+
+        async function callSecurityApi(path, payload = {}) {
+            const response = await fetch(path, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (redirectIfUnauthorized(response)) {
+                throw new Error('Login required');
+            }
+
+            let data = {};
+            try {
+                data = await response.json();
+            } catch (err) {
+                // ignore JSON parse errors
+            }
+
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Request failed');
+            }
+
+            if (data.status) {
+                updateSecurityStatus(data.status);
+            } else {
+                await refreshSecurityStatus();
+            }
+            await refreshIntrusionLogs();
+            return data;
         }
 
         async function armAway() {
             try {
-                const response = await fetch('/arm');
-                const text = await response.text();
-                showControlMessage('System armed (Away mode)', 'success');
-                setTimeout(() => location.reload(), 1500);
+                await callSecurityApi('/api/security/arm', { mode: 'Away' });
+                showControlMessage('System armed (Away)', 'success');
             } catch (error) {
-                showControlMessage('Failed to arm system', 'error');
+                showControlMessage(error.message, 'error');
             }
         }
 
         async function armStay() {
-            showControlMessage('Stay mode not yet implemented in web interface', 'info');
+            try {
+                await callSecurityApi('/api/security/arm', { mode: 'Stay' });
+                showControlMessage('System armed (Stay)', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
         }
 
         async function disarm() {
             try {
-                const response = await fetch('/disarm');
-                const text = await response.text();
+                await callSecurityApi('/api/security/disarm');
                 showControlMessage('System disarmed', 'success');
-                setTimeout(() => location.reload(), 1500);
             } catch (error) {
-                showControlMessage('Failed to disarm system', 'error');
+                showControlMessage(error.message, 'error');
             }
+        }
+
+        async function triggerPanic() {
+            if (!confirm('Trigger panic alarm? Monitoring service will be notified.')) {
+                return;
+            }
+            try {
+                await callSecurityApi('/api/security/panic');
+                showControlMessage('Panic alarm activated', 'success');
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        async function refreshSecurityStatus() {
+            try {
+                const response = await fetch('/api/security/status');
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Unable to fetch status');
+                }
+                updateSecurityStatus(data.status);
+            } catch (error) {
+                showControlMessage(error.message, 'error');
+            }
+        }
+
+        function updateSecurityStatus(status) {
+            if (!status) {
+                return;
+            }
+            securityEls.mode.textContent = status.mode;
+            securityEls.entryDelay.textContent = formatEntryDelay(status.entry_delay_deadline);
+            securityEls.monitoring.textContent = status.monitoring_call_scheduled ? 'Scheduled' : 'Not scheduled';
+
+            const zones = status.armed_zones && status.armed_zones.length
+                ? status.armed_zones.join(', ')
+                : 'None';
+            securityEls.zones.textContent = zones;
+
+            const badge = document.createElement('span');
+            badge.classList.add('badge');
+            badge.textContent = status.alarm_state;
+            badge.classList.add(status.alarm_state === 'ALARM_ACTIVE' ? 'alarm'
+                : status.alarm_state === 'ENTRY_DELAY' ? 'delay' : 'idle');
+            securityEls.alarm.innerHTML = '';
+            securityEls.alarm.appendChild(badge);
+        }
+
+        async function refreshIntrusionLogs() {
+            try {
+                const response = await fetch('/api/security/intrusions?limit=15');
+                if (redirectIfUnauthorized(response)) {
+                    return;
+                }
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Unable to fetch intrusion logs');
+                }
+                renderIntrusionLogs(data.intrusions);
+            } catch (error) {
+                securityEls.intrusionTable.innerHTML = '';
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.textContent = error.message;
+                row.appendChild(cell);
+                securityEls.intrusionTable.appendChild(row);
+            }
+        }
+
+        function renderIntrusionLogs(records) {
+            securityEls.intrusionTable.innerHTML = '';
+            if (!records.length) {
+                const row = document.createElement('tr');
+                const cell = document.createElement('td');
+                cell.colSpan = 5;
+                cell.textContent = 'No intrusion events logged yet.';
+                row.appendChild(cell);
+                securityEls.intrusionTable.appendChild(row);
+                return;
+            }
+
+            for (const record of records.slice().reverse()) {
+                const row = document.createElement('tr');
+                const timestampCell = document.createElement('td');
+                timestampCell.textContent = new Date(record.timestamp).toLocaleString();
+                const sensorCell = document.createElement('td');
+                sensorCell.textContent = record.sensor_id || '-';
+                const zoneCell = document.createElement('td');
+                zoneCell.textContent = record.zone_id || '-';
+                const actionCell = document.createElement('td');
+                actionCell.textContent = record.action;
+                const statusCell = document.createElement('td');
+                statusCell.textContent = record.status || '-';
+
+                row.appendChild(timestampCell);
+                row.appendChild(sensorCell);
+                row.appendChild(zoneCell);
+                row.appendChild(actionCell);
+                row.appendChild(statusCell);
+
+                securityEls.intrusionTable.appendChild(row);
+            }
+        }
+
+        function formatEntryDelay(deadline) {
+            if (!deadline) {
+                return 'No active entry delay';
+            }
+            const target = new Date(deadline);
+            const seconds = Math.max(Math.round((target - Date.now()) / 1000), 0);
+            return `${target.toLocaleTimeString()} (${seconds}s remaining)`;
+        }
+
+        function refreshSecurityData() {
+            refreshSecurityStatus();
+            refreshIntrusionLogs();
         }
 
         function logout() {
@@ -307,6 +568,12 @@
         function goToSurveillance() {
             window.location.href = '/surveillance';
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshSecurityData();
+            setInterval(refreshSecurityStatus, 15000);
+            setInterval(refreshIntrusionLogs, 20000);
+        });
     </script>
 </body>
 </html>

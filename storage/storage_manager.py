@@ -37,6 +37,7 @@ class StorageManager:
                     timeout=10.0
                 )
                 self.connection.row_factory = sqlite3.Row  # 딕셔너리 형태로 결과 반환
+                self.connection.execute("PRAGMA foreign_keys = ON;")
                 print("[StorageManager] Database connected successfully.")
                 self._initialize_schema()
                 return True
@@ -83,6 +84,12 @@ class StorageManager:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        -- Devices table (sensor catalog)
+        CREATE TABLE IF NOT EXISTS devices (
+            device_id TEXT PRIMARY KEY,
+            device_type TEXT NOT NULL
+        );
+
         -- Event logs table
         CREATE TABLE IF NOT EXISTS event_logs (
             log_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,6 +113,15 @@ class StorageManager:
             mode_id INTEGER PRIMARY KEY AUTOINCREMENT,
             mode_name TEXT NOT NULL,
             description TEXT
+        );
+
+        -- Sensor-to-zone assignment table
+        CREATE TABLE IF NOT EXISTS sensor_zone_assignments (
+            device_id TEXT PRIMARY KEY,
+            zone_id INTEGER NOT NULL,
+            assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (device_id) REFERENCES devices(device_id) ON DELETE CASCADE,
+            FOREIGN KEY (zone_id) REFERENCES safety_zones(zone_id) ON DELETE CASCADE
         );
         """
 
@@ -216,7 +232,9 @@ class StorageManager:
         """마지막 INSERT의 ID 반환"""
         try:
             cursor = self.connection.cursor()
-            return cursor.lastrowid
+            cursor.execute("SELECT last_insert_rowid()")
+            row = cursor.fetchone()
+            return row[0] if row else -1
         except sqlite3.Error as e:
             print(f"[StorageManager] Get last insert ID error: {e}")
             return -1

@@ -398,6 +398,210 @@ def status():
         """
     return "System offline <a href='/'>Back</a>"
 
+
+def _require_api_login():
+    if not session.get('logged_in'):
+        return jsonify({
+            'success': False,
+            'message': 'Authentication required'
+        }), 401
+    return None
+
+
+def _security_instance():
+    if safehome_system and getattr(safehome_system, "security_system", None):
+        return safehome_system.security_system
+    return None
+
+
+def _security_controller():
+    if safehome_system and getattr(safehome_system, "system_controller", None):
+        return safehome_system.system_controller
+    return None
+
+
+def _build_security_status_payload():
+    """Helper that returns (payload, error_response)."""
+    security_system = _security_instance()
+    if not security_system:
+        return None, (jsonify({
+            'success': False,
+            'message': 'Security system not available'
+        }), 503)
+
+    status = security_system.get_status()
+    if not status:
+        return None, (jsonify({
+            'success': False,
+            'message': 'Security status unavailable'
+        }), 500)
+
+    payload = {
+        'mode': status.mode.name,
+        'alarm_state': status.alarm_state.name,
+        'armed_zones': sorted(list(status.armed_zones)) if status.armed_zones else [],
+        'entry_delay_deadline': status.entry_delay_deadline.isoformat() if status.entry_delay_deadline else None,
+        'monitoring_call_scheduled': status.monitoring_call_scheduled,
+    }
+    return payload, None
+
+
+@app.route('/api/security/status', methods=['GET'])
+def api_security_status():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    status_payload, error = _build_security_status_payload()
+    if error:
+        return error
+    return jsonify({'success': True, 'status': status_payload}), 200
+
+
+@app.route('/api/security/intrusions', methods=['GET'])
+def api_security_intrusions():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    security_system = _security_instance()
+    if not security_system:
+        return jsonify({
+            'success': False,
+            'message': 'Security system not available'
+        }), 503
+
+    limit = request.args.get('limit', default=50, type=int)
+    if limit is None or limit <= 0:
+        limit = 50
+    limit = min(limit, 200)
+
+    records = security_system.get_intrusion_logs()
+    payload = []
+    for record in records[-limit:]:
+        payload.append({
+            'timestamp': record.timestamp.isoformat(),
+            'sensor_id': record.sensor_id,
+            'zone_id': record.zone_id,
+            'sensor_type': record.sensor_type.name if record.sensor_type else None,
+            'mode': record.mode.name,
+            'action': record.action,
+            'status': record.status.name if record.status else None,
+            'details': record.details,
+        })
+
+    return jsonify({'success': True, 'intrusions': payload}), 200
+
+
+@app.route('/api/security/arm', methods=['POST'])
+def api_security_arm():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    controller = _security_controller()
+    if not controller:
+        return jsonify({
+            'success': False,
+            'message': 'Security controller not available'
+        }), 503
+
+    username = session.get('username')
+    if not username:
+        return jsonify({'success': False, 'message': 'User session missing'}), 403
+
+    controller.authenticated_user = username
+
+    data = request.get_json(silent=True) or {}
+    requested_mode = data.get('mode', MODE_AWAY)
+    allowed_modes = {MODE_AWAY, MODE_STAY}
+    if requested_mode not in allowed_modes:
+        return jsonify({
+            'success': False,
+            'message': f'Unsupported arm mode: {requested_mode}'
+        }), 400
+
+    if not controller.set_security_mode(requested_mode):
+        message = controller.last_error_message or 'Unable to arm system'
+        return jsonify({'success': False, 'message': message}), 400
+
+    status_payload, error = _build_security_status_payload()
+    if error:
+        return error
+
+    return jsonify({
+        'success': True,
+        'message': f'System armed in {requested_mode} mode',
+        'status': status_payload
+    }), 200
+
+
+@app.route('/api/security/disarm', methods=['POST'])
+def api_security_disarm():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    controller = _security_controller()
+    if not controller:
+        return jsonify({
+            'success': False,
+            'message': 'Security controller not available'
+        }), 503
+
+    username = session.get('username')
+    if not username:
+        return jsonify({'success': False, 'message': 'User session missing'}), 403
+
+    controller.authenticated_user = username
+
+    if not controller.set_security_mode(MODE_DISARMED):
+        message = controller.last_error_message or 'Unable to disarm system'
+        return jsonify({'success': False, 'message': message}), 400
+
+    status_payload, error = _build_security_status_payload()
+    if error:
+        return error
+
+    return jsonify({
+        'success': True,
+        'message': 'System disarmed',
+        'status': status_payload
+    }), 200
+
+
+@app.route('/api/security/panic', methods=['POST'])
+def api_security_panic():
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    security_system = _security_instance()
+    if not security_system:
+        return jsonify({
+            'success': False,
+            'message': 'Security system not available'
+        }), 503
+
+    security_system.trigger_panic()
+
+    if safehome_system and getattr(safehome_system, 'log_manager', None):
+        safehome_system.log_manager.log_event(
+            event_type='PANIC_TRIGGERED',
+            description='Panic alarm triggered via web dashboard',
+            user_id=session.get('username')
+        )
+
+    status_payload, error = _build_security_status_payload()
+    if error:
+        return error
+
+    return jsonify({
+        'success': True,
+        'message': 'Panic alarm triggered',
+        'status': status_payload
+    }), 200
+
 # ========================================
 # Surveillance API Endpoints
 # ========================================

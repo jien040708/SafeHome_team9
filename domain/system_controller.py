@@ -23,6 +23,7 @@ class SystemController:
         self.user_manager = user_manager or UserManager()
         self.authenticated_user: Optional[str] = None
         self.cameras = []  # 카메라 리스트 별도 관리
+        self.last_error_message: Optional[str] = None
 
     def set_ui(self, ui_app):
         self.ui_app = ui_app
@@ -38,8 +39,11 @@ class SystemController:
         return False
 
     def set_security_mode(self, mode_str):
+        self.last_error_message = None
+
         if not self.authenticated_user:
             print("[Error] Login required.")
+            self.last_error_message = "Login required"
             return False
 
         try:
@@ -50,10 +54,13 @@ class SystemController:
             elif mode_str == MODE_STAY:
                 self.security_system.arm(SecurityMode.STAY)
             else:
-                print(f"[Error] Unsupported security mode: {mode_str}")
+                message = f"Unsupported security mode: {mode_str}"
+                print(f"[Error] {message}")
+                self.last_error_message = message
                 return False
         except RuntimeError as exc:
             message = str(exc)
+            self.last_error_message = message
             print(f"[Controller] Failed to change mode: {message}")
             if self.ui_app:
                 self.ui_app.show_alert(message)
