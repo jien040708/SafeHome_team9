@@ -45,15 +45,7 @@ def main():
         
         # Create camera
         camera = DeviceCamera()
-        # Get camera ID from environment variable or command line argument, default to 1
-        import os
-        camera_id = int(os.environ.get('CAMERA_ID', 1))
-        if len(sys.argv) > 1:
-            try:
-                camera_id = int(sys.argv[1])
-            except ValueError:
-                pass
-        camera.set_id(camera_id)
+        camera.set_id(1)
         
         # Wait for image to be loaded
         max_wait = 10  # Maximum 1 second wait

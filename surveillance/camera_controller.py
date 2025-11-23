@@ -2,7 +2,7 @@
 CameraController - 카메라 관리 및 제어 클래스
 UML 다이어그램 기반 구현
 """
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict
 from PIL import Image
 from devices.camera import Camera
 
@@ -16,10 +16,7 @@ class CameraController:
         """CameraController 초기화"""
         self._next_camera_id: int = 1
         self._total_camera_number: int = 0
-        self._cameras: Dict[int, Camera] = {}  # {camera_id: Camera 객체}
-        self._camera_info: Dict[int, Dict] = {}  # {camera_id: {x, y, enabled, password, ...}}
-        self._camera_passwords: Dict[int, str] = {}  # {camera_id: password}
-    
+        
     def add_camera(self, x_coord: int, y_coord: int) -> bool:
         """
         새 카메라 추가
