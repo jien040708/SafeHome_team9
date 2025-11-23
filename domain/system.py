@@ -17,6 +17,7 @@ from domain.device_manager import DeviceManager
 from devices.siren import Siren
 from security.security_system import SecuritySystem
 from security.events import SensorStatus
+from surveillance.camera_controller import CameraController
 
 
 class SystemState(Enum):
@@ -46,6 +47,7 @@ class System:
         self.configuration_manager: Optional[ConfigurationManager] = None
         self.system_controller: Optional[SystemController] = None
         self.security_system: Optional[SecuritySystem] = None
+        self.camera_controller: Optional[CameraController] = None
 
         self.device_manager = None
         self.sensors = []
@@ -262,7 +264,10 @@ class System:
                 ui_app=self.ui_app
             )
 
-            # 7. ?? ??? ?? ?? (?? ?)
+            # 6. CameraController 초기화
+            self.camera_controller = CameraController()
+
+            # 7. 기본 관리자 계정 생성 (없으면)
             self._initialize_default_user()
 
             # ??? ?? ??

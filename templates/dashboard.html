@@ -234,6 +234,15 @@
             </div>
         </div>
 
+        <!-- Surveillance Card -->
+        <div class="card">
+            <h2>Surveillance</h2>
+            <p>Monitor and control your security cameras:</p>
+            <div class="control-buttons">
+                <button class="btn-primary" onclick="goToSurveillance()">Surveillance</button>
+            </div>
+        </div>
+
         <!-- Quick Info Card -->
         <div class="card">
             <h2>Quick Information</h2>
@@ -293,6 +302,10 @@
 
         function goToSettings() {
             window.location.href = '/configure';
+        }
+
+        function goToSurveillance() {
+            window.location.href = '/surveillance';
         }
     </script>
 </body>

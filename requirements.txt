@@ -1,0 +1,13 @@
+# SafeHome Team9 - Python Dependencies
+
+# Web Framework
+Flask>=2.3.0
+
+# Image Processing (for PIL/Pillow)
+Pillow>=10.0.0
+
+# Testing Framework
+pytest>=7.4.0
+
+# HTTP Requests (for API testing)
+requests>=2.31.0
