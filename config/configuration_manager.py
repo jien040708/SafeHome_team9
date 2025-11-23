@@ -1,15 +1,28 @@
 """
-ConfigurationManager - 시스템 설정 관리
-SystemSettings, SafeHomeMode, SafetyZone 정보를 총괄 관리
+ConfigurationManager - 시스템 전체 설정을 관리하는 모듈.
+SystemSettings, SafeHomeMode, SafetyZone 정보를 총괄 관리하며
+SecuritySystem과의 연동도 담당한다.
 """
 from typing import List, Optional
+
 from config.system_settings import SystemSettings
 from storage.storage_manager import StorageManager
-from utils.constants import MODE_DISARMED, MODE_AWAY, MODE_STAY
+from utils.constants import (
+    MODE_DISARMED,
+    MODE_AWAY,
+    MODE_STAY,
+    SENSOR_WIN_DOOR,
+    SENSOR_MOTION,
+    SENSOR_CAMERA,
+)
+from domain.device_manager import DeviceManager
+from security.events import SensorType
+from security.security_system import SecuritySystem
 
 
 class SafeHomeMode:
-    """SafeHome 모드 정보"""
+    """SafeHome 모드 정보."""
+
     def __init__(self, mode_id: int, mode_name: str, description: str):
         self.mode_id = mode_id
         self.mode_name = mode_name
@@ -20,7 +33,8 @@ class SafeHomeMode:
 
 
 class SafetyZone:
-    """안전 구역 정보"""
+    """안전 구역 정보."""
+
     def __init__(self, zone_id: int, zone_name: str, is_armed: bool):
         self.zone_id = zone_id
         self.zone_name = zone_name
@@ -39,7 +53,7 @@ class SafetyZone:
 
 class ConfigurationManager:
     """
-    시스템 전체 구성 정보를 관리하는 매니저 클래스
+    시스템 전체 구성 정보를 관리하는 매니저 클래스.
     """
 
     def __init__(self):
@@ -48,11 +62,12 @@ class ConfigurationManager:
         self.safety_zones: List[SafetyZone] = []
         self.current_mode_name: str = MODE_DISARMED
         self.storage = StorageManager()
+        self.device_manager = DeviceManager()
 
     def initialize_configuration(self) -> bool:
         """
-        시스템 구성 초기화
-        데이터베이스에서 모든 설정 정보를 로드
+        시스템 구성 초기화.
+        데이터베이스에서 모든 설정 정보를 로드.
         """
         print("[ConfigurationManager] Initializing configuration...")
 
@@ -69,7 +84,7 @@ class ConfigurationManager:
         return True
 
     def _load_safehome_modes(self):
-        """데이터베이스에서 SafeHome 모드 목록 로드"""
+        """데이터베이스에서 SafeHome 모드 목록 로드."""
         sql = "SELECT mode_id, mode_name, description FROM safehome_modes"
         result = self.storage.execute_query(sql)
 
@@ -85,7 +100,7 @@ class ConfigurationManager:
             print(f"[ConfigurationManager] Loaded {len(self.safehome_modes)} SafeHome modes.")
 
     def _load_safety_zones(self):
-        """데이터베이스에서 Safety Zone 목록 로드"""
+        """데이터베이스에서 Safety Zone 목록 로드."""
         sql = "SELECT zone_id, zone_name, is_armed FROM safety_zones"
         result = self.storage.execute_query(sql)
 
@@ -102,7 +117,7 @@ class ConfigurationManager:
 
     def update_system_settings(self, settings: SystemSettings) -> bool:
         """
-        시스템 설정 업데이트
+        시스템 설정 업데이트.
         :param settings: 새 SystemSettings 객체
         :return: 성공 여부
         """
@@ -111,11 +126,10 @@ class ConfigurationManager:
 
     def update_safehome_mode(self, mode_name: str) -> bool:
         """
-        현재 SafeHome 모드 변경
+        현재 SafeHome 모드 변경.
         :param mode_name: 모드 이름 (Disarmed, Away, Stay 등)
         :return: 성공 여부
         """
-        # 유효한 모드인지 확인
         valid_modes = [m.mode_name for m in self.safehome_modes]
         if mode_name in valid_modes:
             self.current_mode_name = mode_name
@@ -127,7 +141,7 @@ class ConfigurationManager:
 
     def modify_safety_zone(self, zone_id: int, zone_name: str = None, is_armed: bool = None) -> bool:
         """
-        Safety Zone 정보 수정
+        Safety Zone 정보 수정.
         :param zone_id: 구역 ID
         :param zone_name: 새 구역 이름 (optional)
         :param is_armed: 무장 여부 (optional)
@@ -138,7 +152,6 @@ class ConfigurationManager:
             print(f"[ConfigurationManager] Safety zone {zone_id} not found.")
             return False
 
-        # 수정 사항 적용
         if zone_name:
             zone.zone_name = zone_name
         if is_armed is not None:
@@ -147,7 +160,6 @@ class ConfigurationManager:
             else:
                 zone.disarm()
 
-        # 데이터베이스 업데이트
         sql = "UPDATE safety_zones SET zone_name = ?, is_armed = ? WHERE zone_id = ?"
         rows = self.storage.execute_update(sql, (zone.zone_name, int(zone.is_armed), zone_id))
 
@@ -160,7 +172,7 @@ class ConfigurationManager:
 
     def add_safety_zone(self, zone_name: str) -> bool:
         """
-        새 Safety Zone 추가
+        새 Safety Zone 추가.
         :param zone_name: 구역 이름
         :return: 성공 여부
         """
@@ -179,7 +191,7 @@ class ConfigurationManager:
 
     def delete_safety_zone(self, zone_id: int) -> bool:
         """
-        Safety Zone 삭제
+        Safety Zone 삭제.
         :param zone_id: 구역 ID
         :return: 성공 여부
         """
@@ -194,29 +206,58 @@ class ConfigurationManager:
             print(f"[ConfigurationManager] Failed to delete safety zone {zone_id}.")
             return False
 
-    # Getters
     def get_system_setting(self) -> SystemSettings:
-        """현재 시스템 설정 반환"""
+        """현재 시스템 설정 반환."""
         return self.system_settings
 
     def get_current_safehome_mode(self) -> str:
-        """현재 SafeHome 모드 이름 반환"""
+        """현재 SafeHome 모드 이름 반환."""
         return self.current_mode_name
 
     def get_safehome_modes(self) -> List[SafeHomeMode]:
-        """모든 SafeHome 모드 목록 반환"""
+        """모든 SafeHome 모드 목록 반환."""
         return self.safehome_modes
 
     def get_safety_zone_info(self) -> List[SafetyZone]:
-        """모든 Safety Zone 정보 반환"""
+        """모든 Safety Zone 정보 반환."""
         return self.safety_zones
 
     def get_safety_zone_by_id(self, zone_id: int) -> Optional[SafetyZone]:
-        """특정 ID의 Safety Zone 반환"""
+        """특정 ID의 Safety Zone 반환."""
         for zone in self.safety_zones:
             if zone.zone_id == zone_id:
                 return zone
         return None
+
+    def configure_security_system(self, security_system: SecuritySystem) -> None:
+        """
+        SecuritySystem에 센서 및 구역 정보를 등록한다.
+        """
+        if not security_system:
+            return
+
+        devices = self.device_manager.load_all_devices()
+        zone_ids = [str(zone.zone_id) for zone in self.safety_zones]
+        next_zone_index = 0
+
+        for device_id, device_type in devices:
+            sensor_type = self._map_device_type(device_type)
+            security_system.register_sensor(device_id, sensor_type)
+
+            if zone_ids:
+                zone_id = zone_ids[next_zone_index % len(zone_ids)]
+                security_system.assign_sensor_to_zone(device_id, zone_id)
+                next_zone_index += 1
+
+    def _map_device_type(self, device_type: str) -> SensorType:
+        """저장된 디바이스 타입 문자열을 SensorType enum으로 변환."""
+        if device_type == SENSOR_WIN_DOOR:
+            return SensorType.DOOR
+        if device_type == SENSOR_MOTION:
+            return SensorType.MOTION
+        if device_type == SENSOR_CAMERA:
+            return SensorType.OTHER
+        return SensorType.OTHER
 
     def __repr__(self):
         return (f"ConfigurationManager(current_mode={self.current_mode_name}, "

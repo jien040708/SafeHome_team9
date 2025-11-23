@@ -115,6 +115,11 @@ class SecuritySystem:
         self._armed_zones.discard(zone_id)
         self._notify_status_change()
 
+    def set_event_listener(self, listener: Optional["SecurityEventListener"]) -> None:
+        """Attach or replace the listener that receives security events."""
+        self._listener = listener
+        self._notify_status_change()
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------

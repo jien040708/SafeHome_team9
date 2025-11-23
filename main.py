@@ -407,6 +407,7 @@ def main():
         MotionDetector("Living Room"),
         Camera("Garden Cam")
     ]
+    safehome_system.sensors = sensors
 
     # Connect Devices to SystemController
     if safehome_system.system_controller:

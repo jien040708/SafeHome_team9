@@ -1,11 +1,52 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+from datetime import datetime
 from PIL import Image, ImageTk
 import os
 from utils.constants import *
+from security.interfaces import SecurityEventListener
 
 # 페이지 이름 상수
 PAGES = ("Login", "MainMenu", "Zones", "Modes", "Monitoring")
+
+
+class TkSecurityListener(SecurityEventListener):
+    """Adapter that routes SecuritySystem events to the Tkinter UI."""
+
+    def __init__(self, app: "SafeHomeApp"):
+        self.app = app
+
+    def _run_on_ui(self, callback, *args, **kwargs):
+        if not getattr(self.app, "root", None):
+            return
+        self.app.root.after(0, lambda: callback(*args, **kwargs))
+
+    def on_status_changed(self, status):
+        text = f"{status.mode.name} ({status.alarm_state.name})"
+        self._run_on_ui(self.app.update_status_label, text)
+
+    def on_intrusion_logged(self, record):
+        sensor = record.sensor_id or "Unknown sensor"
+        zone = record.zone_id or "Zone ?"
+        timestamp = record.timestamp.strftime("%H:%M:%S")
+        message = f"[{timestamp}] {record.action} at {sensor} ({zone})"
+        self._run_on_ui(self.app.add_log, message)
+        self._run_on_ui(self.app.add_intrusion_log, message)
+
+    def on_entry_delay_started(self, event, deadline):
+        deadline_str = deadline.strftime("%H:%M:%S")
+        msg = f"Entry delay started for {event.sensor_id or 'Unknown'} (until {deadline_str})"
+        self._run_on_ui(self.app.add_log, msg)
+
+    def on_alarm_activated(self, event):
+        sensor = event.sensor_id if event else "Unknown"
+        alert_msg = f"ALARM! Triggered by {sensor}"
+        self._run_on_ui(self.app.show_alert, alert_msg)
+        self._run_on_ui(self.app.add_log, f"Alarm activated ({sensor})")
+
+    def on_alarm_cleared(self, cleared_by: str):
+        message = f"Alarm cleared by {cleared_by}"
+        self._run_on_ui(self.app.add_log, message)
 
 class SafeHomeApp:
     def __init__(self, root, system, sensors):
@@ -32,21 +73,22 @@ class SafeHomeApp:
         container.grid_columnconfigure(0, weight=1)
 
         self.frames = {}
-        self.images = {} # 이미지 참조 유지용
+        self.images = {}  # ??? ?? ???
+        self.intrusion_logs: list[str] = []
 
-        # 각 페이지 뷰 생성
+        # ? ??? ??
         for page_name in PAGES:
             cls = globals()[f"{page_name}View"]
-            # app=self를 전달하여 뷰에서 SafeHomeApp 메서드 호출 가능하게 함
             frame = cls(parent=container, system=self.system, sensors=self.sensors, app=self)
             self.frames[page_name] = frame
             frame.grid(row=0, column=0, sticky="nsew")
 
-        # 하단 상태바 생성
+        # ?? ??? ??
         self.create_status_bar()
 
-        # 초기 화면
+        # ?? ??
         self.show_page("Login")
+        self._security_tick()
 
     def create_status_bar(self):
         bar = tk.Frame(self.root, bg="black", height=30)
@@ -72,6 +114,16 @@ class SafeHomeApp:
         if len(current) > 80: current = current[:80] + "..."
         self.status_label.config(text=f"{current} | {message}")
 
+    def add_intrusion_log(self, message: str):
+        """Store intrusion log entries and refresh Monitoring view."""
+        self.intrusion_logs.append(message)
+        if len(self.intrusion_logs) > 1000:
+            self.intrusion_logs = self.intrusion_logs[-1000:]
+
+        monitoring = self.frames.get("Monitoring")
+        if monitoring and hasattr(monitoring, "update_intrusion_log"):
+            monitoring.update_intrusion_log(self.intrusion_logs)
+
     def show_alert(self, msg):
         messagebox.showwarning("ALARM", msg)
 
@@ -87,6 +139,17 @@ class SafeHomeApp:
         except Exception as e:
             print(f"Image load error: {e}")
             return None
+
+    def _security_tick(self):
+        """Periodically advance the SecuritySystem, allowing entry delays to expire."""
+        try:
+            if self.system and getattr(self.system, "security_system", None):
+                self.system.security_system.tick(datetime.utcnow())
+        except Exception as exc:
+            print(f"[UI] Security tick error: {exc}")
+        finally:
+            if getattr(self, "root", None):
+                self.root.after(1000, self._security_tick)
 
 
 # --- View Classes (기존 UI 디자인 반영) ---
@@ -264,6 +327,7 @@ class ZonesView(ttk.Frame):
         self.system = system
         self.app = app
         self.sensors = sensors
+        self.sensor_status_labels = {}
 
         # 헤더 영역
         header = ttk.Frame(self)
@@ -283,11 +347,19 @@ class ZonesView(ttk.Frame):
         
         # 실제 센서 트리거 버튼 생성
         for s in self.sensors:
-            f = ttk.Frame(nav)
-            f.pack(fill="x", pady=2)
-            ttk.Label(f, text=s.get_id(), width=15).pack(side="left")
-            ttk.Button(f, text="Trigger", width=8,
-                       command=lambda sensor=s: self.trigger_sensor(sensor)).pack(side="right")
+            row = ttk.Frame(nav)
+            row.pack(fill="x", pady=2)
+            ttk.Label(row, text=s.get_id(), width=15).pack(side="left")
+            status_text = self._get_initial_status(s)
+            status_label = ttk.Label(row, text=status_text, width=12)
+            status_label.pack(side="left", padx=(5, 10))
+            self.sensor_status_labels[s.get_id()] = status_label
+            ttk.Button(
+                row,
+                text="Trigger",
+                width=8,
+                command=lambda sensor=s: self.trigger_sensor(sensor)
+            ).pack(side="right")
 
         # 우측 캔버스 영역 (이미지 적용)
         canvas_frame = tk.Frame(self, bg="white", highlightthickness=2, highlightbackground="black")
@@ -305,9 +377,60 @@ class ZonesView(ttk.Frame):
         tk.Label(canvas_frame, text="First Floor Layout", font=("Helvetica", 10, "italic"), bg="white").pack(pady=5)
 
     def trigger_sensor(self, sensor):
-        if "Window" in sensor.get_type(): sensor.set_open()
-        elif "Motion" in sensor.get_type(): sensor.detect_motion()
-        messagebox.showinfo("Sensor", f"{sensor.get_id()} Triggered!")
+        sensor_type = sensor.get_type()
+        current_status = None
+        if hasattr(sensor, "get_status"):
+            try:
+                current_status = sensor.get_status()
+            except Exception:
+                current_status = None
+
+        msg = "Triggered"
+        if "Window" in sensor_type or "Door" in sensor_type:
+            if current_status == STATE_CLOSED and hasattr(sensor, "set_open"):
+                sensor.set_open()
+                msg = "Opened"
+            else:
+                if hasattr(sensor, "set_closed"):
+                    sensor.set_closed()
+                msg = "Closed"
+        elif "Motion" in sensor_type:
+            if hasattr(sensor, "detect_motion"):
+                sensor.detect_motion()
+            msg = "Motion Detected"
+        else:
+            if hasattr(sensor, "trigger"):
+                sensor.trigger()
+
+        label = self.sensor_status_labels.get(sensor.get_id())
+        if label:
+            label.config(text=self._status_label_text(sensor))
+
+        messagebox.showinfo("Sensor", f"{sensor.get_id()} {msg}!")
+
+    def _get_initial_status(self, sensor):
+        if hasattr(sensor, "get_status"):
+            try:
+                status = sensor.get_status()
+                return "Closed" if status == STATE_CLOSED else status or "Unknown"
+            except Exception:
+                return "Unknown"
+        return "Unknown"
+
+    def _status_label_text(self, sensor):
+        if hasattr(sensor, "get_status"):
+            try:
+                status = sensor.get_status()
+                if status == STATE_CLOSED:
+                    return "Closed"
+                if status == STATE_OPEN:
+                    return "Open"
+                if status == STATE_DETECTED:
+                    return "Motion"
+                return status or "Unknown"
+            except Exception:
+                return "Unknown"
+        return "Unknown"
 
 
 class ModesView(ttk.Frame):
@@ -360,9 +483,10 @@ class ModesView(ttk.Frame):
         self.mode_display.config(text=f"Current: {text}")
         
     def refresh(self):
-        # 화면이 열릴 때 최신 상태 반영
-        current_status = self.controller.current_state.get_name()
-        self.update_mode_display(current_status)
+        # ??? ?? ? ?? ?? ??
+        if hasattr(self.system, "security_system") and self.system.security_system:
+            current_status = self.system.security_system.mode.name
+            self.update_mode_display(current_status)
 
 
 class MonitoringView(ttk.Frame):
@@ -530,6 +654,18 @@ class MonitoringView(ttk.Frame):
         ttk.Button(btn_frame, text="Refresh Status", style="Primary.TButton",
                    command=self.update_system_status).pack(side="left", padx=5)
 
+        ttk.Label(self, text="Intrusion Log", font=("Helvetica", 12, "bold")).pack(pady=(10, 0))
+        self.log_list = tk.Listbox(self, height=10)
+        self.log_list.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+
+    def update_intrusion_log(self, messages):
+        """Refresh the intrusion log list."""
+        if not hasattr(self, "log_list"):
+            return
+        self.log_list.delete(0, tk.END)
+        for msg in messages:
+            self.log_list.insert(tk.END, msg)
+
     def update_system_status(self):
         """시스템 상태 업데이트"""
         if hasattr(self, 'status_text'):
@@ -541,6 +677,11 @@ Security Mode: {status_info['security_mode'] or 'N/A'}
 """
             self.status_text.delete(1.0, tk.END)
             self.status_text.insert(1.0, status_str)
+
+    def refresh(self):
+        if hasattr(self.app, "intrusion_logs"):
+            self.update_intrusion_log(self.app.intrusion_logs)
+        self.update_system_status()
 
     def reset_system(self):
         """Common Function 6: Reset the system"""

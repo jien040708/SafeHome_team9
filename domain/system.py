@@ -3,6 +3,7 @@ System - SafeHome 시스템 메인 클래스
 전체 시스템의 생명주기, 컴포넌트 관리, 7가지 Common Functions 구현
 """
 import time
+from datetime import timedelta
 from typing import Optional
 from enum import Enum
 
@@ -13,6 +14,9 @@ from config.configuration_manager import ConfigurationManager
 from domain.system_controller import SystemController
 from utils.constants import *
 from domain.device_manager import DeviceManager
+from devices.siren import Siren
+from security.security_system import SecuritySystem
+from security.events import SensorStatus
 
 
 class SystemState(Enum):
@@ -41,11 +45,14 @@ class System:
         self.log_manager: Optional[LogManager] = None
         self.configuration_manager: Optional[ConfigurationManager] = None
         self.system_controller: Optional[SystemController] = None
+        self.security_system: Optional[SecuritySystem] = None
 
         self.device_manager = None
         self.sensors = []
+        self.siren: Optional[Siren] = None
+        self.security_listener = None
 
-        # UI 참조
+        # UI ??
         self.ui_app = None
 
     # ========================================
@@ -177,8 +184,8 @@ class System:
     # ========================================
     def turn_on(self) -> bool:
         """
-        시스템 시작
-        모든 컴포넌트 초기화 및 시작
+        ??? ??
+        ?? ???? ??? ? ??
         """
         if self.system_state != SystemState.OFF:
             print(f"[System] System is already {self.system_state.value}.")
@@ -188,28 +195,77 @@ class System:
         self.system_state = SystemState.INITIALIZING
 
         try:
-            # 1. StorageManager 초기화 및 연결
+            # 1. StorageManager ??? ? ??
             self.storage_manager = StorageManager()
             if not self.storage_manager.connect():
                 raise Exception("Failed to connect to database.")
 
-            # 2. ConfigurationManager 초기화
+            # 2. ConfigurationManager ???
             self.configuration_manager = ConfigurationManager()
             self.configuration_manager.initialize_configuration()
 
-            # 3. LoginManager 초기화
+            # 3. Siren ? SecuritySystem ???
+            self.siren = Siren("MainSiren")
+
+            def get_delay_time():
+                settings = self.configuration_manager.get_system_setting()
+                delay_seconds = max(settings.get_alarm_delay_time(), 0)
+                return timedelta(seconds=delay_seconds)
+
+            def call_monitoring_service(reason: str):
+                print(f"[SecuritySystem] Monitoring service notified: {reason}")
+
+            def activate_siren():
+                if self.siren:
+                    self.siren.activate()
+
+            def deactivate_siren():
+                if self.siren:
+                    self.siren.deactivate()
+
+            def get_monitored_sensors_state():
+                states = {}
+                for sensor in self.sensors:
+                    get_id = getattr(sensor, "get_id", None)
+                    get_status = getattr(sensor, "get_status", None)
+                    if not get_id or not get_status:
+                        continue
+                    raw_status = get_status()
+                    if raw_status == STATE_OPEN:
+                        mapped = SensorStatus.OPEN
+                    elif raw_status == STATE_DETECTED:
+                        mapped = SensorStatus.MOTION_DETECTED
+                    else:
+                        mapped = SensorStatus.NORMAL
+                    states[get_id()] = mapped
+                return states
+
+            self.security_system = SecuritySystem(
+                get_delay_time=get_delay_time,
+                call_monitoring_service=call_monitoring_service,
+                activate_siren=activate_siren,
+                deactivate_siren=deactivate_siren,
+                get_monitored_sensors_state=get_monitored_sensors_state,
+            )
+            self.configuration_manager.configure_security_system(self.security_system)
+            self._attach_security_listener()
+
+            # 4. LoginManager ???
             self.login_manager = LoginManager()
 
-            # 4. LogManager 초기화
+            # 5. LogManager ???
             self.log_manager = LogManager()
 
-            # 5. SystemController 초기화 (기존 로직 활용)
-            self.system_controller = SystemController(ui_app=self.ui_app)
+            # 6. SystemController ??? (?? ?? ??)
+            self.system_controller = SystemController(
+                security_system=self.security_system,
+                ui_app=self.ui_app
+            )
 
-            # 6. 기본 관리자 계정 생성 (없으면)
+            # 7. ?? ??? ?? ?? (?? ?)
             self._initialize_default_user()
 
-            # 시스템 시작 로그
+            # ??? ?? ??
             self.log_manager.log_event(
                 event_type="SYSTEM_START",
                 description="SafeHome system started successfully"
@@ -262,8 +318,8 @@ class System:
                     camera.deactivate() if hasattr(camera, 'deactivate') else None
 
             # 4. 알람 비활성화
-            if self.system_controller and self.system_controller.siren:
-                self.system_controller.siren.deactivate()
+            if self.siren:
+                self.siren.deactivate()
 
             # 5. 데이터베이스 연결 종료
             if self.storage_manager:
@@ -362,14 +418,23 @@ class System:
             'state': self.system_state.value,
             'authenticated': self.login_manager.is_user_authenticated() if self.login_manager else False,
             'current_user': self.login_manager.get_current_user().get_username() if self.login_manager and self.login_manager.is_user_authenticated() else None,
-            'security_mode': self.system_controller.current_state.get_name() if self.system_controller else None
+            'security_mode': self.security_system.mode.name if self.security_system else None
         }
 
     def set_ui(self, ui_app):
-        """UI 앱 설정"""
+        """UI ?? ??"""
         self.ui_app = ui_app
         if self.system_controller:
             self.system_controller.set_ui(ui_app)
+        self._attach_security_listener()
+
+    def _attach_security_listener(self):
+        """Create or update the Tkinter listener for security events."""
+        if not (self.security_system and self.ui_app):
+            return
+        from ui.main_window import TkSecurityListener
+        self.security_listener = TkSecurityListener(self.ui_app)
+        self.security_system.set_event_listener(self.security_listener)
 
     def _initialize_default_user(self):
         """기본 관리자 계정 생성"""
