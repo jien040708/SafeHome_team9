@@ -79,8 +79,11 @@ class System:
         self.security_listener = None
         self.camera_gateway = SystemCameraGateway(self)
 
-        # UI ??
+        # UI 참조
         self.ui_app = None
+
+        # turn_on 완료 후 호출될 콜백 (디바이스 초기화 등)
+        self.on_turn_on_complete = None
 
     # ========================================
     # Common Function 1 & 2: Login (Control Panel / Web Browser)
@@ -304,6 +307,14 @@ class System:
 
             self.system_state = SystemState.READY
             print("[System] SafeHome system is now READY.")
+
+            # turn_on 완료 콜백 호출 (디바이스 초기화 등)
+            if self.on_turn_on_complete:
+                try:
+                    self.on_turn_on_complete()
+                except Exception as callback_error:
+                    print(f"[System] on_turn_on_complete callback error: {callback_error}")
+
             return True
 
         except Exception as e:
@@ -318,6 +329,8 @@ class System:
         """
         시스템 종료
         모든 컴포넌트를 안전하게 종료
+        Sequence: Save Config -> Deactivate Sensors -> Disable Cameras ->
+                  Deactivate Alarm -> Logout -> Log Event -> Disconnect DB
         """
         if self.system_state == SystemState.OFF:
             print("[System] System is already off.")
@@ -327,34 +340,61 @@ class System:
         self.system_state = SystemState.SHUTDOWN
 
         try:
-            # 시스템 종료 로그 (종료 전 기록)
+            # 1. 설정 저장 (Save Configuration)
+            if self.configuration_manager:
+                settings = self.configuration_manager.get_system_setting()
+                self.configuration_manager.update_system_settings(settings)
+                print("[System] Configuration saved.")
+
+            # 2. 센서 비활성화 (Deactivate Sensors)
+            if self.sensors:
+                for sensor in self.sensors:
+                    if hasattr(sensor, 'deactivate'):
+                        sensor.deactivate()
+                print(f"[System] {len(self.sensors)} sensors deactivated.")
+
+            # 3. 카메라 비활성화 (Disable All Cameras)
+            if self.camera_controller:
+                self.camera_controller.disable_all_camera()
+                print("[System] All cameras disabled.")
+
+            # Also deactivate cameras through system_controller if available
+            if self.system_controller and hasattr(self.system_controller, 'cameras'):
+                cameras = self.system_controller.cameras
+                if cameras:
+                    for camera in cameras:
+                        if hasattr(camera, 'deactivate'):
+                            camera.deactivate()
+
+            # 4. 알람/사이렌 비활성화 (Deactivate Alarm)
+            if self.siren:
+                self.siren.deactivate()
+                print("[System] Siren deactivated.")
+
+            # Also deactivate security system alarm if active
+            if self.security_system:
+                try:
+                    self.security_system.deactivate_alarm()
+                except Exception:
+                    pass  # Alarm might not be active
+
+            # 5. 현재 사용자 로그아웃 (Logout User)
+            if self.login_manager and self.login_manager.is_user_authenticated():
+                self.logout()
+                print("[System] User logged out.")
+
+            # 6. 시스템 종료 로그 기록 (Log SYSTEM_SHUTDOWN Event)
             if self.log_manager:
                 self.log_manager.log_event(
                     event_type="SYSTEM_SHUTDOWN",
                     description="SafeHome system shutting down"
                 )
+                print("[System] Shutdown event logged.")
 
-            # 1. 현재 사용자 로그아웃
-            if self.login_manager and self.login_manager.is_user_authenticated():
-                self.logout()
-
-            # 2. 센서 비활성화 (SystemController를 통해)
-            if self.system_controller:
-                # 센서 비활성화 로직 (필요 시 추가)
-                pass
-
-            # 3. 카메라 비활성화
-            if self.system_controller and self.system_controller.cameras:
-                for camera in self.system_controller.cameras:
-                    camera.deactivate() if hasattr(camera, 'deactivate') else None
-
-            # 4. 알람 비활성화
-            if self.siren:
-                self.siren.deactivate()
-
-            # 5. 데이터베이스 연결 종료
+            # 7. 데이터베이스 연결 종료 (Disconnect Database)
             if self.storage_manager:
                 self.storage_manager.disconnect()
+                print("[System] Database disconnected.")
 
             self.system_state = SystemState.OFF
             print("[System] SafeHome system is now OFF.")
@@ -368,66 +408,300 @@ class System:
     # ========================================
     # Common Function 6: Reset the system
     # ========================================
-    def reset(self) -> bool:
+    def reset(self) -> dict:
         """
-        시스템 재시작
-        현재 상태를 저장하고 시스템을 재시작
+        시스템 재시작 (Reset = Turn Off + Turn On)
+        설정을 유지하면서 모든 컴포넌트를 재생성
+
+        Returns:
+            dict: {'success': bool, 'message': str, 'phase': int (optional)}
         """
+        # 전제조건: 시스템이 켜져 있어야 함
+        if self.system_state == SystemState.OFF:
+            print("[System] Cannot reset: System is not running.")
+            return {
+                'success': False,
+                'message': 'Cannot reset: System is not running',
+                'phase': 0
+            }
+
         print("[System] Resetting SafeHome system...")
+        print("[System] Phase 1: Turning off...")
 
-        # 현재 설정 백업 (필요 시)
-        current_settings = None
-        if self.configuration_manager:
-            current_settings = self.configuration_manager.get_system_setting()
+        # 리셋 시작 로그 (턴오프 전에 기록)
+        if self.log_manager:
+            self.log_manager.log_event(
+                event_type="SYSTEM_RESET_START",
+                description="System reset initiated - Phase 1: Turning off"
+            )
 
-        # 시스템 종료
-        if not self.turn_off():
-            print("[System] Failed to turn off system during reset.")
-            return False
+        # ========================================
+        # Phase 1: Turn Off the System
+        # ========================================
+        # turn_off()에서 설정 저장, 센서 비활성화, 카메라 비활성화,
+        # 로그아웃, DB 연결 종료가 수행됨
+        turn_off_result = self.turn_off()
 
-        # 잠시 대기
-        time.sleep(1)
+        if not turn_off_result:
+            print("[System] Reset failed: Could not turn off system (Phase 1)")
+            return {
+                'success': False,
+                'message': 'Reset failed: Could not turn off system',
+                'phase': 1
+            }
 
-        # 시스템 시작
-        if not self.turn_on():
-            print("[System] Failed to turn on system during reset.")
-            return False
+        print("[System] Phase 1 complete: System turned off")
 
-        # 설정 복원 (필요 시)
-        if current_settings:
-            self.configuration_manager.update_system_settings(current_settings)
+        # 잠시 대기 (컴포넌트 정리 시간)
+        time.sleep(0.5)
+
+        # ========================================
+        # Phase 2: Turn On the System
+        # ========================================
+        print("[System] Phase 2: Turning on...")
+
+        # turn_on()에서 모든 컴포넌트 재생성, 저장된 설정 로드가 수행됨
+        turn_on_result = self.turn_on()
+
+        if not turn_on_result:
+            print("[System] Reset failed: Could not turn on system (Phase 2)")
+            print("[System] WARNING: System remains in OFF state")
+            return {
+                'success': False,
+                'message': 'Reset failed: Could not turn on system. System is OFF.',
+                'phase': 2,
+                'state': 'OFF'
+            }
+
+        print("[System] Phase 2 complete: System turned on")
+
+        # ========================================
+        # Phase 3: Reset Complete
+        # ========================================
+        # 리셋 완료 로그
+        if self.log_manager:
+            self.log_manager.log_event(
+                event_type="SYSTEM_RESET_COMPLETE",
+                description="System reset completed successfully"
+            )
 
         print("[System] SafeHome system reset successfully.")
-        return True
+        print("[System] All settings preserved, all components recreated.")
+
+        return {
+            'success': True,
+            'message': 'System reset successfully',
+            'phase': 3
+        }
+
+    def reset_simple(self) -> bool:
+        """
+        간단한 리셋 (하위 호환용)
+        :return: 성공 여부
+        """
+        result = self.reset()
+        return result['success']
 
     # ========================================
     # Common Function 7: Change master password through control panel
     # ========================================
     def change_password(self, old_password: str, new_password: str) -> bool:
         """
-        제어 패널을 통한 마스터 비밀번호 변경
+        제어 패널을 통한 마스터 비밀번호 변경 (하위 호환용)
         :param old_password: 현재 비밀번호
         :param new_password: 새 비밀번호
         :return: 성공 여부
         """
+        result = self.change_master_password(old_password, new_password, new_password)
+        return result['success']
+
+    def change_master_password(self, current_password: str, new_password: str,
+                                confirm_password: str, max_reentry_tries: int = 3) -> dict:
+        """
+        제어 패널을 통한 마스터 비밀번호 변경 (상세 정보 반환)
+        Common Function 7: Change Master Password Through Control Panel
+
+        3단계 프로세스:
+        - Phase 1: 현재 비밀번호 검증
+        - Phase 2: 새 비밀번호 입력
+        - Phase 3: 새 비밀번호 확인 및 저장
+
+        :param current_password: 현재 비밀번호
+        :param new_password: 새 비밀번호
+        :param confirm_password: 새 비밀번호 확인
+        :param max_reentry_tries: 최대 재시도 횟수 (기본: 3)
+        :return: 변경 결과 딕셔너리
+        """
+        # 전제조건 1: 시스템이 켜져 있어야 함
+        if self.system_state == SystemState.OFF:
+            print("[System] System is off. Cannot change password.")
+            return {
+                'success': False,
+                'message': 'System is off. Please turn on the system first.',
+                'phase': 0,
+                'error_type': 'SYSTEM_OFF'
+            }
+
+        # 전제조건 2: 시스템이 잠겨있지 않아야 함
+        if self.system_state == SystemState.LOCKED:
+            print("[System] System is locked. Cannot change password.")
+            return {
+                'success': False,
+                'message': 'System is locked. Please contact administrator.',
+                'phase': 0,
+                'error_type': 'SYSTEM_LOCKED'
+            }
+
+        # 전제조건 3: 사용자가 로그인되어 있어야 함
         if not self.login_manager.is_user_authenticated():
             print("[System] Authentication required to change password.")
-            return False
+            return {
+                'success': False,
+                'message': 'Authentication required. Please login first.',
+                'phase': 0,
+                'error_type': 'NOT_AUTHENTICATED'
+            }
 
-        success = self.login_manager.change_password(old_password, new_password)
+        user = self.login_manager.get_current_user().get_username()
 
-        if success:
-            user = self.login_manager.get_current_user().get_username()
+        # 비밀번호 변경 시도 로그
+        self.log_manager.log_event(
+            event_type="PASSWORD_CHANGE_START",
+            description="Password change initiated",
+            user_id=user
+        )
+
+        # LoginManager를 통한 비밀번호 변경
+        result = self.login_manager.change_password_with_details(
+            current_password, new_password, confirm_password, max_reentry_tries
+        )
+
+        if result['success']:
+            # 성공 로그
             self.log_manager.log_event(
-                event_type="PASSWORD_CHANGE",
+                event_type="PASSWORD_CHANGE_SUCCESS",
                 description="User password changed successfully",
                 user_id=user
             )
             print(f"[System] Password changed successfully for user '{user}'.")
         else:
-            print("[System] Failed to change password.")
+            # 실패 로그
+            error_type = result.get('error_type', 'UNKNOWN')
+            phase = result.get('phase', 0)
+            self.log_manager.log_event(
+                event_type="PASSWORD_CHANGE_FAILED",
+                description=f"Password change failed at phase {phase}: {error_type}",
+                user_id=user
+            )
+            print(f"[System] Password change failed: {result['message']}")
 
-        return success
+        return result
+
+    def validate_current_password_for_change(self, current_password: str) -> dict:
+        """
+        비밀번호 변경을 위한 현재 비밀번호 검증 (Phase 1)
+        재시도 횟수 관리 포함
+
+        :param current_password: 현재 비밀번호
+        :return: 검증 결과 딕셔너리
+        """
+        if not self.login_manager.is_user_authenticated():
+            return {
+                'success': False,
+                'message': 'Authentication required',
+                'error_type': 'NOT_AUTHENTICATED'
+            }
+
+        result = self.login_manager.validate_current_password(current_password)
+
+        user = self.login_manager.get_current_user().get_username()
+
+        if result['success']:
+            self.log_manager.log_event(
+                event_type="PASSWORD_VERIFY_SUCCESS",
+                description="Current password verified for password change",
+                user_id=user
+            )
+        else:
+            self.log_manager.log_event(
+                event_type="PASSWORD_VERIFY_FAILED",
+                description="Current password verification failed",
+                user_id=user
+            )
+
+        return result
+
+    def set_new_master_password(self, new_password: str, confirm_password: str) -> dict:
+        """
+        새 마스터 비밀번호 설정 (Phase 2-3)
+        현재 비밀번호 검증 후 호출
+
+        :param new_password: 새 비밀번호
+        :param confirm_password: 새 비밀번호 확인
+        :return: 설정 결과 딕셔너리
+        """
+        if not self.login_manager.is_user_authenticated():
+            return {
+                'success': False,
+                'message': 'Authentication required',
+                'error_type': 'NOT_AUTHENTICATED'
+            }
+
+        result = self.login_manager.set_new_password(new_password, confirm_password)
+
+        user = self.login_manager.get_current_user().get_username()
+
+        if result['success']:
+            self.log_manager.log_event(
+                event_type="PASSWORD_CHANGE_SUCCESS",
+                description="New password set successfully",
+                user_id=user
+            )
+        else:
+            error_type = result.get('error_type', 'UNKNOWN')
+            self.log_manager.log_event(
+                event_type="PASSWORD_CHANGE_FAILED",
+                description=f"Failed to set new password: {error_type}",
+                user_id=user
+            )
+
+        return result
+
+    def lock_account_after_failed_attempts(self, username: str, interface_type: str = 'control_panel') -> dict:
+        """
+        비밀번호 변경 시 재시도 횟수 초과로 인한 계정 잠금
+
+        :param username: 사용자 ID
+        :param interface_type: 인터페이스 타입
+        :return: 잠금 결과 딕셔너리
+        """
+        # 계정 잠금
+        success = self.storage_manager.lock_user_account(username, interface_type)
+
+        if success:
+            self.log_manager.log_event(
+                event_type="ACCOUNT_LOCKED",
+                description="Account locked due to too many failed password change attempts",
+                user_id=username
+            )
+
+            # 사용자 로그아웃
+            if self.login_manager.is_user_authenticated():
+                self.logout()
+
+            print(f"[System] Account '{username}' locked due to too many failed attempts.")
+
+            return {
+                'success': True,
+                'message': 'Account locked due to too many failed attempts',
+                'locked': True
+            }
+        else:
+            return {
+                'success': False,
+                'message': 'Failed to lock account',
+                'locked': False
+            }
 
     # ========================================
     # 추가 메서드
