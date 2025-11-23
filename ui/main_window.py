@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from PIL import Image, ImageTk
 import os
+from pathlib import Path
 from utils.constants import *
 
 # 페이지 이름 상수
@@ -13,6 +14,9 @@ class SafeHomeApp:
         self.system = system  # System 인스턴스
         self.controller = system.system_controller  # 기존 호환성 유지
         self.sensors = sensors
+        
+        # 프로젝트 루트 디렉토리 경로 계산 (ui/main_window.py의 상위 디렉토리)
+        self.project_root = Path(__file__).parent.parent.absolute()
         
         self.root.title("SafeHome Prototype")
         self.root.configure(bg="#d9d9d9")
@@ -76,11 +80,23 @@ class SafeHomeApp:
         messagebox.showwarning("ALARM", msg)
 
     def load_image(self, path, size):
-        """이미지 로드 헬퍼 함수 (에러 처리 포함)"""
+        """이미지 로드 헬퍼 함수 (에러 처리 포함)
+        path: 상대 경로는 프로젝트 루트 기준, 절대 경로는 그대로 사용
+        """
         try:
-            if not os.path.exists(path):
+            # 프로젝트 루트 기준 경로로 변환
+            if not os.path.isabs(path):
+                # 상대 경로인 경우 프로젝트 루트 기준으로 변환
+                full_path = self.project_root / path
+            else:
+                # 절대 경로인 경우 그대로 사용
+                full_path = Path(path)
+            
+            full_path_str = str(full_path)
+            if not os.path.exists(full_path_str):
+                print(f"Image not found: {full_path_str}")
                 return None
-            img = Image.open(path)
+            img = Image.open(full_path_str)
             img = img.resize(size, Image.Resampling.LANCZOS)
             photo = ImageTk.PhotoImage(img)
             return photo
@@ -293,8 +309,8 @@ class ZonesView(ttk.Frame):
         canvas_frame = tk.Frame(self, bg="white", highlightthickness=2, highlightbackground="black")
         canvas_frame.pack(side="left", padx=20, pady=20, expand=True)
 
-        # [수정 2] floorplan.png 이미지 로드
-        self.floor_img = self.app.load_image("floorplan.png", (400, 300))
+        # [수정 2] floorplan.png 이미지 로드 (프로젝트 루트 기준 경로)
+        self.floor_img = self.app.load_image("virtual_device_v3/floorplan.png", (400, 300))
         if self.floor_img:
             lbl_img = tk.Label(canvas_frame, image=self.floor_img, bg="white")
             lbl_img.image = self.floor_img # 참조 유지
@@ -344,7 +360,7 @@ class ModesView(ttk.Frame):
         canvas_frame.pack(side="left", padx=20, pady=20, expand=True)
 
         # [수정 2] floorplan.png 이미지 로드 (크기 조절)
-        self.floor_img = self.app.load_image("floorplan.png", (400, 300))
+        self.floor_img = self.app.load_image("virtual_device_v3/floorplan.png", (400, 300))
         if self.floor_img:
             lbl_img = tk.Label(canvas_frame, image=self.floor_img, bg="white")
             lbl_img.image = self.floor_img

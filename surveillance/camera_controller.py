@@ -4,38 +4,33 @@ UML 다이어그램 기반 구현
 """
 from typing import List, Optional, Dict
 from PIL import Image
-from devices.camera import Camera
+from surveillance.safehome_camera import SafeHomeCamera
 
 
 class CameraController:
     """
     카메라 추가, 삭제, 활성화/비활성화, 제어, 뷰 표시 등을 관리하는 컨트롤러
+    SafeHomeCamera 객체를 관리합니다.
     """
     
     def __init__(self):
         """CameraController 초기화"""
         self._next_camera_id: int = 1
         self._total_camera_number: int = 0
+        self._cameras: Dict[int, SafeHomeCamera] = {}
         
     def add_camera(self, x_coord: int, y_coord: int) -> bool:
         """
-        새 카메라 추가
+        새 카메라 추가 (SafeHomeCamera 생성)
         :param x_coord: X 좌표
         :param y_coord: Y 좌표
         :return: 성공 여부
         """
         try:
             camera_id = self._next_camera_id
-            camera = Camera(f"Camera_{camera_id}")
+            camera = SafeHomeCamera(camera_id=camera_id, location=[x_coord, y_coord])
             
             self._cameras[camera_id] = camera
-            self._camera_info[camera_id] = {
-                'id': camera_id,
-                'x': x_coord,
-                'y': y_coord,
-                'enabled': True,
-                'device_id': camera.device_id
-            }
             
             self._next_camera_id += 1
             self._total_camera_number += 1
@@ -57,11 +52,12 @@ class CameraController:
             return False
         
         try:
-            del self._cameras[camera_id]
-            del self._camera_info[camera_id]
-            if camera_id in self._camera_passwords:
-                del self._camera_passwords[camera_id]
+            camera = self._cameras[camera_id]
+            # DeviceCamera 스레드 중지
+            if hasattr(camera, '_device_camera') and hasattr(camera._device_camera, 'stop'):
+                camera._device_camera.stop()
             
+            del self._cameras[camera_id]
             self._total_camera_number -= 1
             print(f"[CameraController] Camera {camera_id} deleted")
             return True
@@ -121,12 +117,11 @@ class CameraController:
         :param camera_id: 활성화할 카메라 ID
         :return: 성공 여부
         """
-        if camera_id not in self._camera_info:
+        if camera_id not in self._cameras:
             print(f"[CameraController] Camera {camera_id} not found")
             return False
         
-        self._camera_info[camera_id]['enabled'] = True
-        print(f"[CameraController] Camera {camera_id} enabled")
+        self._cameras[camera_id].enable()
         return True
     
     def disable_camera(self, camera_id: int) -> bool:
@@ -135,45 +130,42 @@ class CameraController:
         :param camera_id: 비활성화할 카메라 ID
         :return: 성공 여부
         """
-        if camera_id not in self._camera_info:
+        if camera_id not in self._cameras:
             print(f"[CameraController] Camera {camera_id} not found")
             return False
         
-        self._camera_info[camera_id]['enabled'] = False
-        print(f"[CameraController] Camera {camera_id} disabled")
+        self._cameras[camera_id].disable()
         return True
     
     def control_single_camera(self, camera_id: int, control_id: int) -> bool:
         """
         단일 카메라 제어
         :param camera_id: 카메라 ID
-        :param control_id: 제어 ID (예: 0=촬영, 1=녹화 시작, 2=녹화 중지 등)
+        :param control_id: 제어 ID (예: 0=팬 왼쪽, 1=팬 오른쪽, 2=줌 인, 3=줌 아웃 등)
         :return: 성공 여부
         """
         if camera_id not in self._cameras:
             print(f"[CameraController] Camera {camera_id} not found")
             return False
         
-        if not self._camera_info[camera_id]['enabled']:
+        camera = self._cameras[camera_id]
+        if not camera.is_enabled():
             print(f"[CameraController] Camera {camera_id} is disabled")
             return False
         
         try:
-            camera = self._cameras[camera_id]
-            
             # control_id에 따른 제어 동작
             if control_id == 0:
-                camera.take_picture()
+                return camera.pan_left()
             elif control_id == 1:
-                camera.start_recording()
+                return camera.pan_right()
             elif control_id == 2:
-                camera.status = "idle"  # 녹화 중지
-                print(f"[CameraController] Camera {camera_id} recording stopped")
+                return camera.zoom_in()
+            elif control_id == 3:
+                return camera.zoom_out()
             else:
                 print(f"[CameraController] Unknown control_id: {control_id}")
                 return False
-            
-            return True
         except Exception as e:
             print(f"[CameraController] Failed to control camera {camera_id}: {e}")
             return False
@@ -199,20 +191,16 @@ class CameraController:
             img = Image.new('RGB', (cols * thumbnail_size, rows * thumbnail_size), color='gray')
             
             # 각 카메라 썸네일 로드 및 배치
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            
-            for idx, (camera_id, info) in enumerate(sorted(self._camera_info.items())):
+            for idx, (camera_id, camera) in enumerate(sorted(self._cameras.items())):
                 row = idx // cols
                 col = idx % cols
                 x = col * thumbnail_size
                 y = row * thumbnail_size
                 
-                # camera{id}.jpg 이미지 로드
-                image_path = os.path.join(base_dir, 'virtual_device_v3', f'camera{camera_id}.jpg')
-                
-                if os.path.exists(image_path):
-                    thumb = Image.open(image_path)
-                    thumb = thumb.resize((thumbnail_size, thumbnail_size), Image.LANCZOS)
+                # SafeHomeCamera의 display_view() 사용
+                thumb_view = camera.display_view()
+                if thumb_view:
+                    thumb = thumb_view.resize((thumbnail_size, thumbnail_size), Image.LANCZOS)
                     img.paste(thumb, (x, y))
                 else:
                     # 이미지가 없으면 검은색 박스
@@ -230,7 +218,7 @@ class CameraController:
     
     def display_single_view(self, camera_id: int) -> Optional[Image.Image]:
         """
-        단일 카메라 뷰 표시
+        단일 카메라 뷰 표시 (SafeHomeCamera의 display_view() 사용)
         :param camera_id: 카메라 ID
         :return: 카메라 이미지 (PIL Image) 또는 None
         """
@@ -238,33 +226,12 @@ class CameraController:
             print(f"[CameraController] Camera {camera_id} not found")
             return None
         
-        if not self._camera_info[camera_id]['enabled']:
+        camera = self._cameras[camera_id]
+        if not camera.is_enabled():
             print(f"[CameraController] Camera {camera_id} is disabled")
             return None
         
-        try:
-            from PIL import Image
-            import os
-            
-            # virtual_device_v3/camera{id}.jpg 이미지 로드
-            base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            image_path = os.path.join(base_dir, 'virtual_device_v3', f'camera{camera_id}.jpg')
-            
-            if os.path.exists(image_path):
-                img = Image.open(image_path)
-                # 800x600으로 리사이즈
-                img = img.resize((800, 600), Image.LANCZOS)
-                return img
-            else:
-                # 이미지가 없으면 기본 이미지 생성
-                img = Image.new('RGB', (800, 600), color='black')
-                from PIL import ImageDraw, ImageFont
-                draw = ImageDraw.Draw(img)
-                draw.text((400, 300), f"Camera {camera_id} View\n(Image not found)", fill='white', anchor='mm')
-                return img
-        except Exception as e:
-            print(f"[CameraController] Failed to display camera {camera_id} view: {e}")
-            return None
+        return camera.display_view()
     
     def get_all_camera_info(self) -> List[List[int]]:
         """
@@ -272,19 +239,20 @@ class CameraController:
         :return: 2D 정수 배열, 각 내부 배열은 [camera_id, x, y, enabled(0/1), ...] 형식
         """
         info_list = []
-        for camera_id, info in sorted(self._camera_info.items()):
+        for camera_id, camera in sorted(self._cameras.items()):
+            location = camera.get_location()
             info_list.append([
-                info['id'],
-                info['x'],
-                info['y'],
-                1 if info['enabled'] else 0,
+                camera_id,
+                location[0] if len(location) > 0 else 0,  # x
+                location[1] if len(location) > 1 else 0,  # y
+                1 if camera.is_enabled() else 0,  # enabled
                 self._total_camera_number
             ])
         return info_list
     
     def set_camera_password(self, camera_id: int, input_password: str) -> None:
         """
-        카메라 비밀번호 설정
+        카메라 비밀번호 설정 (SafeHomeCamera의 set_password() 사용)
         :param camera_id: 카메라 ID
         :param input_password: 설정할 비밀번호
         :return: None
@@ -293,12 +261,11 @@ class CameraController:
             print(f"[CameraController] Camera {camera_id} not found")
             return
         
-        self._camera_passwords[camera_id] = input_password
-        print(f"[CameraController] Password set for camera {camera_id}")
+        self._cameras[camera_id].set_password(input_password)
     
     def validate_camera_password(self, camera_id: int, input_password: str) -> int:
         """
-        카메라 비밀번호 검증
+        카메라 비밀번호 검증 (SafeHomeCamera의 password 사용)
         :param camera_id: 카메라 ID
         :param input_password: 입력한 비밀번호
         :return: 0=성공, 1=실패, -1=카메라 없음, -2=비밀번호 미설정
@@ -306,29 +273,14 @@ class CameraController:
         if camera_id not in self._cameras:
             return -1
         
-        if camera_id not in self._camera_passwords:
+        camera = self._cameras[camera_id]
+        if not camera.has_password():
             return -2
         
-        if self._camera_passwords[camera_id] == input_password:
+        if camera.get_password() == input_password:
             return 0
         else:
             return 1
-    
-    def _delete_camera_password(self, camera_id: int) -> int:
-        """
-        카메라 비밀번호 삭제 (Private 메서드)
-        :param camera_id: 카메라 ID
-        :return: 0=성공, -1=카메라 없음, -2=비밀번호 없음
-        """
-        if camera_id not in self._cameras:
-            return -1
-        
-        if camera_id not in self._camera_passwords:
-            return -2
-        
-        del self._camera_passwords[camera_id]
-        print(f"[CameraController] Password deleted for camera {camera_id}")
-        return 0
     
     def get_camera_count(self) -> int:
         """
@@ -337,11 +289,11 @@ class CameraController:
         """
         return self._total_camera_number
     
-    def get_camera(self, camera_id: int) -> Optional[Camera]:
+    def get_camera(self, camera_id: int) -> Optional[SafeHomeCamera]:
         """
         카메라 객체 조회 (헬퍼 메서드)
         :param camera_id: 카메라 ID
-        :return: Camera 객체 또는 None
+        :return: SafeHomeCamera 객체 또는 None
         """
         return self._cameras.get(camera_id)
 

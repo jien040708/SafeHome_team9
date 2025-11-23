@@ -444,7 +444,7 @@ def get_all_cameras():
                     'x': info[1],
                     'y': info[2],
                     'enabled': bool(info[3]),
-                    'has_password': camera_id in safehome_system.camera_controller._camera_passwords
+                    'has_password': camera.has_password() if camera else False
                 })
             return jsonify({'success': True, 'cameras': cameras}), 200
         else:
