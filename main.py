@@ -1189,22 +1189,11 @@ def open_camera_view_window(camera_id):
 def run_web():
     app.run(port=5000, debug=False, use_reloader=False)
 
-def main():
-    global safehome_system
-    root = tk.Tk()
-
-    # System Init (Common Function 4: Turn the system on)
-    safehome_system = System()
-    if not safehome_system.turn_on():
-        print("Failed to start SafeHome system. Exiting...")
-        return
-
-    # Devices Init
-    sensors = [
-        WindowDoorSensor("Front Door"),
-        MotionDetector("Living Room"),
-        Camera("Garden Cam")
-    ]
+def initialize_devices_after_turn_on(safehome_system, sensors):
+    """
+    시스템 turn_on() 성공 후 호출되어 디바이스를 초기화합니다.
+    """
+    # Sensors를 시스템에 연결
     safehome_system.sensors = sensors
 
     # Connect Devices to SystemController
@@ -1213,6 +1202,7 @@ def main():
             s.add_observer(safehome_system.system_controller)
             if isinstance(s, Camera):
                 safehome_system.system_controller.add_camera(s)
+        print("[Main] Connected sensors to SystemController")
 
     # Initialize cameras in CameraController (3 cameras)
     # Positions based on black dots in floorplan.png (607x373)
@@ -1225,17 +1215,36 @@ def main():
         safehome_system.camera_controller.add_camera(332, 262)
         print("[Main] Initialized 3 cameras in CameraController at floorplan black dot positions")
 
-    # UI Init
+
+def main():
+    global safehome_system
+    root = tk.Tk()
+
+    # System 객체 생성 (아직 turn_on 하지 않음)
+    # Common Function 4: Turn the system on은 UI에서 사용자가 버튼을 누를 때 실행됨
+    safehome_system = System()
+
+    # Devices 준비 (아직 연결하지 않음 - turn_on 후에 연결됨)
+    sensors = [
+        WindowDoorSensor("Front Door"),
+        MotionDetector("Living Room"),
+        Camera("Garden Cam")
+    ]
+
+    # UI Init (시스템이 꺼진 상태에서 시작)
     ui_app = SafeHomeApp(root, safehome_system, sensors)
+
+    # 시스템에 UI 참조 및 디바이스 초기화 콜백 설정
     safehome_system.set_ui(ui_app)
+    safehome_system.on_turn_on_complete = lambda: initialize_devices_after_turn_on(safehome_system, sensors)
 
     # Web Server Start
     t = threading.Thread(target=run_web, daemon=True)
     t.start()
 
     print("=" * 50)
-    print("SafeHome System Started Successfully!")
-    print("Control Panel: Running on Tkinter window")
+    print("SafeHome Control Panel Started")
+    print("System Status: OFF (Press 'Turn On' to start)")
     print("Web Interface: http://localhost:5000")
     print("=" * 50)
 
@@ -1243,8 +1252,9 @@ def main():
         root.mainloop()
     finally:
         # System Shutdown (Common Function 5: Turn the system off)
-        print("\nShutting down SafeHome system...")
-        safehome_system.turn_off()
+        if safehome_system.system_state.value != "Off":
+            print("\nShutting down SafeHome system...")
+            safehome_system.turn_off()
 
 if __name__ == "__main__":
     main()

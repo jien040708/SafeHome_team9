@@ -148,37 +148,189 @@ class LoginManager:
 
     def change_password(self, old_password: str, new_password: str) -> bool:
         """
-        현재 로그인된 사용자의 비밀번호 변경
+        현재 로그인된 사용자의 비밀번호 변경 (하위 호환용)
         :param old_password: 현재 비밀번호
         :param new_password: 새 비밀번호
         :return: 성공 여부
         """
+        result = self.change_password_with_details(old_password, new_password, new_password)
+        return result['success']
+
+    def change_password_with_details(self, current_password: str, new_password: str,
+                                      confirm_password: str, max_reentry_tries: int = 3) -> dict:
+        """
+        마스터 비밀번호 변경 (상세 정보 반환)
+        Common Function 7: Change Master Password Through Control Panel
+
+        Phase 1: 현재 비밀번호 검증
+        Phase 2: 새 비밀번호 입력
+        Phase 3: 새 비밀번호 확인 및 저장
+
+        :param current_password: 현재 비밀번호
+        :param new_password: 새 비밀번호
+        :param confirm_password: 새 비밀번호 확인
+        :param max_reentry_tries: 최대 재시도 횟수 (기본: 3)
+        :return: 변경 결과 딕셔너리
+        """
+        # 전제조건: 사용자가 로그인되어 있어야 함
         if not self.is_authenticated or not self.current_user:
             print("[LoginManager] No authenticated user to change password.")
-            return False
+            return {
+                'success': False,
+                'message': 'Authentication required. Please login first.',
+                'phase': 0,
+                'error_type': 'NOT_AUTHENTICATED'
+            }
 
-        # 디버깅: 현재 사용자 정보 출력
-        print(f"[DEBUG] Current user: {self.current_user.get_username()}")
-        print(f"[DEBUG] Stored password: {self.current_user.get_password()}")
-        print(f"[DEBUG] Input old password: {old_password}")
+        username = self.current_user.get_username()
+        interface_type = self.current_user.get_user_interface()
 
-        # 현재 비밀번호 확인
-        if not self.validate_credentials(self.current_user, old_password):
-            print("[LoginManager] Old password is incorrect.")
-            return False
+        # ========================================
+        # Phase 1: 현재 비밀번호 검증
+        # ========================================
+        print(f"[LoginManager] Phase 1: Validating current password for user '{username}'")
 
-        # 새 비밀번호 설정 (정책 검증 포함)
+        if not self.validate_credentials(self.current_user, current_password):
+            print("[LoginManager] Current password is incorrect.")
+
+            # 실패 횟수 증가 (재시도 로직은 호출자에서 관리)
+            return {
+                'success': False,
+                'message': 'Current password is incorrect',
+                'phase': 1,
+                'error_type': 'INCORRECT_PASSWORD'
+            }
+
+        print("[LoginManager] Phase 1 complete: Current password verified")
+
+        # ========================================
+        # Phase 2 & 3: 새 비밀번호 검증 및 확인
+        # ========================================
+        print("[LoginManager] Phase 2-3: Validating new password")
+
+        # 새 비밀번호와 확인 비밀번호 일치 확인
+        if new_password != confirm_password:
+            print("[LoginManager] New passwords do not match.")
+            return {
+                'success': False,
+                'message': 'New passwords do not match. Please try again.',
+                'phase': 3,
+                'error_type': 'PASSWORD_MISMATCH'
+            }
+
+        # 새 비밀번호가 현재 비밀번호와 같은지 확인 (선택사항)
+        if new_password == current_password:
+            print("[LoginManager] New password cannot be the same as current password.")
+            return {
+                'success': False,
+                'message': 'New password cannot be the same as current password.',
+                'phase': 2,
+                'error_type': 'SAME_PASSWORD'
+            }
+
+        # 새 비밀번호 정책 검증 (set_password에서 수행)
         if not self.current_user.set_password(new_password):
             print("[LoginManager] New password does not meet requirements.")
-            return False
+            return {
+                'success': False,
+                'message': 'New password does not meet security requirements.',
+                'phase': 2,
+                'error_type': 'WEAK_PASSWORD'
+            }
 
-        # 데이터베이스에 저장
+        print("[LoginManager] Phase 2-3 complete: New password validated")
+
+        # ========================================
+        # 비밀번호 저장
+        # ========================================
+        print("[LoginManager] Saving new password to database")
+
         if self.current_user.save():
-            print(f"[LoginManager] Password changed successfully for user '{self.current_user.get_username()}'.")
-            return True
+            print(f"[LoginManager] Password changed successfully for user '{username}'.")
+            return {
+                'success': True,
+                'message': 'Password changed successfully',
+                'phase': 3,
+                'username': username
+            }
         else:
             print("[LoginManager] Failed to save new password.")
-            return False
+            return {
+                'success': False,
+                'message': 'Failed to save new password. Please try again.',
+                'phase': 3,
+                'error_type': 'DATABASE_ERROR'
+            }
+
+    def validate_current_password(self, password: str) -> dict:
+        """
+        현재 비밀번호 검증 (비밀번호 변경 Phase 1용)
+        :param password: 검증할 현재 비밀번호
+        :return: 검증 결과 딕셔너리
+        """
+        if not self.is_authenticated or not self.current_user:
+            return {
+                'success': False,
+                'message': 'Authentication required',
+                'error_type': 'NOT_AUTHENTICATED'
+            }
+
+        if self.validate_credentials(self.current_user, password):
+            return {
+                'success': True,
+                'message': 'Current password verified'
+            }
+        else:
+            return {
+                'success': False,
+                'message': 'Current password is incorrect',
+                'error_type': 'INCORRECT_PASSWORD'
+            }
+
+    def set_new_password(self, new_password: str, confirm_password: str) -> dict:
+        """
+        새 비밀번호 설정 (비밀번호 변경 Phase 2-3용)
+        현재 비밀번호 검증 후 호출
+        :param new_password: 새 비밀번호
+        :param confirm_password: 새 비밀번호 확인
+        :return: 설정 결과 딕셔너리
+        """
+        if not self.is_authenticated or not self.current_user:
+            return {
+                'success': False,
+                'message': 'Authentication required',
+                'error_type': 'NOT_AUTHENTICATED'
+            }
+
+        # 비밀번호 일치 확인
+        if new_password != confirm_password:
+            return {
+                'success': False,
+                'message': 'New passwords do not match',
+                'error_type': 'PASSWORD_MISMATCH'
+            }
+
+        # 비밀번호 정책 검증 및 설정
+        if not self.current_user.set_password(new_password):
+            return {
+                'success': False,
+                'message': 'Password does not meet requirements',
+                'error_type': 'WEAK_PASSWORD'
+            }
+
+        # 저장
+        if self.current_user.save():
+            return {
+                'success': True,
+                'message': 'Password changed successfully',
+                'username': self.current_user.get_username()
+            }
+        else:
+            return {
+                'success': False,
+                'message': 'Failed to save password',
+                'error_type': 'DATABASE_ERROR'
+            }
 
     def validate_credentials(self, login_interface: LoginInterface, password: str) -> bool:
         """
