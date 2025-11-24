@@ -1,0 +1,271 @@
+CS550 Software Engineering
+SafeHome Project
+Second Report (Design Model)
+Project Team #3     Members:
+I. Overview	6
+1.	Introduction	6
+2.	Goal	6
+3.	How the design work proceeded	6
+4.	Assumptions	7
+II. Architectural structure	8
+1.	Overall Architecture	8
+2.	External Communication Management	9
+3.	Surveillance	10
+4.	Security	11
+5.	Configuration and Data Management	12
+III. Class Diagram	13
+1.	Class Diagram – whole system overview	13
+2.	Class Diagram – Backbone	14
+3.	Class Diagram – around configuration manager	15
+4.	Class Diagram – around system (Device related)	16
+5.	Class Diagram – around web interface	17
+6.	Class Diagram – page hierarchy	18
+IV. CRC cards	19
+1.	Around ConfigurationManager	19
+2.	Around System (Device related)	22
+3.	Around WebInterface	25
+V. State Diagram	26
+1.	Classes around ConfigurationManager	26
+a.	State Diagram for ConfigurationManager	26
+b.	State Diagram for Log	27
+c.	State Diagram for LogManager	28
+d.	State Diagram for LoginInterface	29
+e.	State Diagram for LoginManager	30
+f.	State Diagram for SafetyZone	31
+g.	State Diagram for SafeHomeMode	32
+h.	State Diagram for StorageManager	33
+i.	State Diagram for SystemSettings	34
+2.	Classes around System (Device related)	35
+a.	State Diagram for Alarm	35
+b.	State Diagram for CameraController	36
+c.	State Diagram for MotionSensor	37
+d.	State Diagram for SafeHomeCamera	38
+e.	State Diagram for Sensor	39
+f.	State Diagram for SensorController	40
+g.	State Diagram for System	41
+h.	State Diagram for WindowDoorSensor	42
+3.	Classes around WebInterface	43
+a.	State Diagram for DeviceIcon	43
+b.	State Diagram for FloorPlan	44
+c.	State Diagram for Page	45
+d.	State Diagram for WebInterface	46
+VI. Sequence Diagram	47
+1.	Common Sequence Diagram	47
+a.	Log onto the system through control panel	47
+b.	Log onto the system through web browser	48
+c.	Configure system setting	49
+d.	Turn the system on	50
+e.	Turn the system off	52
+f.	Reset the system	53
+g.	Change master password through control panel	54
+2.	Security Sequence Diagram	55
+a.	Arm/disarm system through control panel	55
+b.	Arm/disarm system through web browser	56
+c.	Arm/disarm safety zone selectively	57
+d.	Alarm condition encountered	58
+e.	Configure safety zone	59
+f.	Create new safety zone	60
+g.	Delete safety zone	61
+h.	Update an exist safety zone	62
+i.	Configure SafeHome modes	63
+j.	View intrusion log	64
+k.	Call monitoring service through control panel	65
+3.	Surveillance Sequence Diagram	66
+a.	Display Specific camera view	66
+b.	Pan/Zoom specific camera view	67
+c.	Set camera password	68
+d.	Delete camera password	69
+e.	View thumbnail Shots	71
+f.	Enable camera	72
+g.	Disable camera	73
+VII. Design evaluation	74
+1.	Architectural Design Metric	74
+a.	Design Structure Quality Index (DSQI)	74
+b.	Fenton's simple morphology metrics	74
+2.	CK Metrics	75
+3.	MOOD Metric	76
+a.	MIF (Method Inheritance Factor)	76
+b.	CF (Coupling Factor)	77
+4.	OO Metric Proposed by Lorenz and Kidd	78
+5.	General Evaluation of Goal	79
+VIII. Lessons Learned	80
+IX. Who did What	81
+*By CTRL+Click, you can move to the desired page in the table of contents.
+I. Overview
+Introduction
+This document describes the design model of SafeHome system proposed in the previous report. Since the design phase of the product is directly connected to the implementation phase, we focus on the well-formed and concrete design of the system. Architectural structure, class diagram, CRC cards, state diagrams, and sequence diagrams are presented to portray the design of the system.
+Goal
+Completely follow the requirement and the analysis model.
+Achieve low coupling, high cohesion, and modularity.
+Pursue testability, integrity, efficiency, maintainability, and reliability.
+Minimize complexity and consider reusability and flexibility.
+How the design work proceeded
+Extraction of classes: To achieve correctness of the design model we used the method in chapter 8.7 of SEPA. We reviewed nouns and verbs from use case scenarios to extract classes.
+Creation of architectural structure: Based on the classes extracted and the use case scenario, we created the architectural structure of the SafeHome system.
+Creation of class diagram: On the basis of extracted classes and architectural structure, we created the class diagram considering the implementation.
+Creation of CRC card.
+Refinement of class diagram: By testing the design using CRC card and reviewing the requirement document and the first report, we refined the class diagram. In addition we focused on ways to achieve low coupling and high cohesion. Actual implementation plan became more concrete and added some classes from java and for database access
+Creation of state diagram.
+Refinement of class diagram: Added some missing functions and attributes
+Creation of sequence diagram: Based on the use case scenario we created the sequence diagram. It enabled us to check if the design followed the requirement specification and the first report.
+Review of state and sequence diagram: Tested based on the first report.
+Refinement of class diagram: Added some missing functions and attributes in the view point of implementation.
+Assumptions
+The details about the Java classes from the library and classes given by TA are not described in this document.
+Although the web interface should be loaded on the web browser to communicate with the system through network connection, we follow the professor’s advice that the web interface can be implemented as applet in the same program with the system.
+II. Architectural structure
+Overall Architecture
+External Communication Management
+Surveillance
+Security
+Configuration and Data Management
+III. Class Diagram
+Class Diagram – whole system overview
+Class Diagram – Backbone
+Class Diagram – around configuration manager
+Class Diagram – around system (Device related)
+Class Diagram – around web interface
+Class Diagram – page hierarchy
+IV. CRC cards
+Around ConfigurationManager
+Note:
+* Database is independent of classes. For our project we will be using MySQL database.
+Around System (Device related)
+Around WebInterface
+*Note: Subclasses of pages are omitted in the CRC card because the variation between them is little or none from the page class.
+V. State Diagram
+Classes around ConfigurationManager
+State Diagram for ConfigurationManager
+State Diagram for Log
+State Diagram for LogManager
+State Diagram for LoginInterface
+State Diagram for LoginManager
+State Diagram for SafetyZone
+State Diagram for SafeHomeMode
+State Diagram for StorageManager
+State Diagram for SystemSettings
+Classes around System (Device related)
+State Diagram for Alarm
+State Diagram for CameraController
+State Diagram for MotionSensor
+State Diagram for SafeHomeCamera
+State Diagram for Sensor
+State Diagram for SensorController
+State Diagram for System
+State Diagram for WindowDoorSensor
+Classes around WebInterface
+State Diagram for DeviceIcon
+State Diagram for FloorPlan
+State Diagram for Page
+State Diagram for WebInterface
+VI. Sequence Diagram
+Common Sequence Diagram
+Log onto the system through control panel
+Log onto the system through web browser
+Configure system setting
+Turn the system on
+Note: The duration of the life time of the classes created in this sequence diagram is as same as that of the system. However, due to the lack of space the life time line is indicated as if the class disappears immediately.
+Turn the system off
+Reset the system
+Change master password through control panel
+Security Sequence Diagram
+Arm/disarm system through control panel
+Arm/disarm system through web browser
+Arm/disarm safety zone selectively
+Alarm condition encountered
+Configure safety zone
+Create new safety zone
+Delete safety zone
+Update an exist safety zone
+Configure SafeHome modes
+View intrusion log
+Call monitoring service through control panel
+Surveillance Sequence Diagram
+Display Specific camera view
+Pan/Zoom specific camera view
+Set camera password
+Delete camera password
+View thumbnail Shots
+Enable camera
+Disable camera
+VII. Design evaluation
+Architectural Design Metric
+Design Structure Quality Index (DSQI)
+S1 = 70
+S2 = 30
+S3 = 21
+S4 = 16
+S5 = 5
+S6 = 5
+S7 = 66
+Program Structure: 			D1 		=	 1
+Module independence: 			D2 = 1 - 30 / 70	=	 40 / 70
+Modules not depend on prior processing: 	D3 = 1 - 21 / 70	=	 49 / 70
+Database size: 				D4 = 1 - 5 / 16	=	 11 / 16
+Database compartmentalization: 		D5 = 1 - 5 / 16 	=	 11 / 16
+Module entrance/exit characteristic:	D6 = 1 - 66 / 70	=	 4 / 70
+W1 = 0.25
+W2 = 0.3
+W3 = 0.25
+W4 = 0.05
+W5 = 0.05
+W6 = 0.1
+DSQI = ∑WiDi = approximately 0.669
+Fenton's simple morphology metrics
+node		= 	70
+arc		= 	71
+size 		= 	141
+depth 		= 	6
+width 		= 	21
+arc-to-node ratio	=	1.014
+CK Metrics
+MOOD Metric
+MIF (Method Inheritance Factor)
+MIF = 98 / 275 = Approximately 0.356
+CF (Coupling Factor)
+* Class numbering follows the table in VII. 3. a.
+CF = 51 / (35 * 35 – 35) = 0.043
+OO Metric Proposed by Lorenz and Kidd
+General Evaluation of Goal
+Correctness
+Class diagram based on extracted classes
+Sequence diagram follows use case scenario
+Review of our work using use case scenario
+coupling, cohesion, complexity, and maintainability
+Division of external interface, device management, and data categories
+Modularization
+Reusability and flexibility
+Modularization
+Try to use generally designed classes (e.g. login or data access)
+VIII. Lessons Learned
+Importance of early stage work of software engineering process
+Well defined documentation
+Importance of preplanning
+Importance of team cooperation
+Difficulty of creating a good design
+IX. Who did What
+Common Work Done:
+Extraction of classes
+Creation of class diagram
+Review of class diagram
+Review of CRC card
+Review of state diagram
+Review of sequence diagram
+Individual work Done:
+Dong Hyun Choi:
+CK metric evaluation
+Mood metric evaluation
+Integrating document
+Dong Yun Yang:
+OO Metric evaluation by Lorenz and Kidd
+Refactoring state diagram
+Refactoring class diagram
+Pham Minh Duc:
+Refactoring sequence diagram
+Ji Yong Shin:
+Writing an overview
+Architectural structure & diagram
+Architectural design metric evaluation
+Refactoring class diagram
+Suraj Pandey
+Refactoring class diagram
