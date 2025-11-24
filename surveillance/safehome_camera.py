@@ -16,10 +16,7 @@ virtual_device_path = project_root / VIRTUAL_DEVICE_DIR
 if virtual_device_path.exists() and str(virtual_device_path) not in sys.path:
     sys.path.insert(0, str(virtual_device_path))
 
-try:
-    from device.device_camera import DeviceCamera as VirtualDeviceCamera
-except ModuleNotFoundError:  # Fallback when running inside repo without sys.path tweak
-    from virtual_device_v4.device.device_camera import DeviceCamera as VirtualDeviceCamera
+from device.device_camera import DeviceCamera as VirtualDeviceCamera
 
 
 class SafeHomeCamera(SensorCamera):

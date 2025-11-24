@@ -11,3 +11,5 @@ pytest>=7.4.0
 
 # HTTP Requests (for API testing)
 requests>=2.31.0
+
+pytest-cov
