@@ -1,0 +1,1265 @@
+   
+¡¡¡¡¡¡
+
+
+
+CS550 Software Engineering
+SafeHome Project
+
+First Report 
+20073580Dong-Hyun Choi20064076Dong-Yun Yang20073284Ji-Yong Shin20074045Pham Minh Duc20075230Suraj Pandey
+
+
+
+
+                                                      Project Team #3     Members:
+Table of Contents
+
+I. Overview									3
+1. Introduction									3
+2. Goal										3
+3. Major Functionalities							4
+4. Plan for the Project							4
+
+II. GUI										 6
+
+III. Assumptions							          9
+
+IV. Use case diagram						        10
+1. Common Functions						         10
+2. Security Functions							         11
+3. Configure Safety Zone Functions				         12
+4. Surveillance Functions						         13
+
+V. Use cases								        14
+1. Common Use Cases						         14
+a.	Log onto the system through control panel			           14
+b.   	Log onto the system through web browser		        	           15
+¡¡¡¡¡¡c.   	Configure system setting					           16	
+¡¡¡¡¡¡d.   	Turn the system on						           17
+¡¡¡¡¡¡e.   	Turn the system off						           18
+¡¡¡¡¡¡f.    	Reset the system						           19
+¡¡¡¡¡¡g.   	Change master password through control panel	 	           20
+2. Security Use Cases						         21
+¡¡¡¡¡¡a.   	Arm/disarm system through control panel			           21
+¡¡¡¡¡¡b.   	Arm/disarm system through web browser			           22
+¡¡¡¡¡¡c.  	Arm/disarm safety zone selectively				           23
+¡¡¡¡¡¡d.   	Alarm condition encountered					           24
+¡¡¡¡¡¡e.   	Configure safety zone                                                                        25
+¡¡¡¡¡¡f.   	Create new safety zone                                                                      26
+g.   	Delete safety zone						           27
+¡¡¡¡¡¡h.   	Update an exist safety zone					           28
+¡¡¡¡¡¡i.	Configure SafeHome modes					           29
+¡¡¡¡¡¡j.	View intrusion log						           31
+¡¡¡¡¡¡k.	Call monitoring service through control panel		           32
+3. Surveillance Use Cases						         33
+¡¡¡¡¡¡a.	Display Specific camera view					           33
+b.	Pan/Zoom specific camera view				           35
+¡¡¡¡¡¡c.	Set camera password						           36
+¡¡¡¡¡¡d.	Delete camera password					           38
+¡¡¡¡¡¡e.	View thumbnail Shots						           40
+¡¡¡¡¡¡f. 	Enable camera							           41
+¡¡¡¡¡¡g.	Disable camera						           42
+
+VI. Swimlane Diagram				 		        43
+1. Common Swimlane Diagram					         43
+a.	Log onto the system through control panel			           43
+b.   	Log onto the system through web browser		        	           44
+¡¡¡¡¡¡c.   	Configure system setting					           45	
+¡¡¡¡¡¡d.   	Turn the system on						           46
+¡¡¡¡¡¡e.   	Turn the system off						           47
+¡¡¡¡¡¡f.    	Reset the system						           48
+¡¡¡¡¡¡g.   	Change master password through control panel	 	           49
+2. Security Swimlane Diagram					         50
+¡¡¡¡¡¡a.   	Arm/disarm system through control panel			           50
+¡¡¡¡¡¡b.   	Arm/disarm system through web browser			           51
+¡¡¡¡¡¡c.  	Arm/disarm safety zone selectively				           52
+¡¡¡¡¡¡d.   	Alarm condition encountered					           53
+¡¡¡¡¡¡e.   	Configure safety zone                                                                        54
+¡¡¡¡¡¡f.   	Create new safety zone                                                                      55
+g.   	Delete safety zone						           56
+¡¡¡¡¡¡h.   	Update an exist safety zone					           57
+¡¡¡¡¡¡i.	Configure SafeHome modes					           58
+¡¡¡¡¡¡j.	View intrusion log						           59
+¡¡¡¡¡¡k.	Call monitoring service through control panel		           60
+3. Surveillance Swimlane Diagram				         61
+¡¡¡¡¡¡a.	Display Specific camera view					           61
+b.	Pan/Zoom specific camera view				           62
+¡¡¡¡¡¡c.	Set camera password						           63
+¡¡¡¡¡¡d.	Delete camera password					           64
+¡¡¡¡¡¡e.	View thumbnail Shots						           65
+¡¡¡¡¡¡f. 	Enable camera							           66
+¡¡¡¡¡¡g.	Disable camera						           67
+
+VII. Who did what							        68
+
+
+I. Overview
+¡¡1. Introduction
+¡¡SafeHome is a new product for home automation. Private homeowners or small business can now think of using a Universal device that they can use to access their property with much ease, flexibility and mobility. SafeHome makes this possible by bringing together all the innovative ideas relating to manage the work of a house owner using the latest technology equipments both remotely and locally. Automation has been made feasible by the widely used wireless equipments. 
+¡¡The product is quite comprehensible in the current market when more and more people are becoming mobile and ubiquitous. Amongst the most thought about targets, SafeHome focuses on making the home absolutely safe. It provides a convenient way to secure the property for those who require both accessibility and quality of service. 
+¡¡To start with, the first version of SafeHome will include only the security and surveillance functions. SafeHome is thought to attract huge number of customers and make a high turnover over a year. Besides fulfilling the basic requirements of security and surveillance, this product will also be standardized to cope with the needs to become Universal device by adding additional functionalities like management, subscription, etc.
+
+¡¡2. Goal
+¡¡Providing all the functions for a safe, secure and managed home is the primary goal of this whole project. The customer who uses this product will be ensured that the home is safe.
+
+ Functional goal is to provide the followings:
+1)  Security functions
+2)  Surveillance functions
+
+ Non-functional goal is as follows:
+1)  To fulfill customer satisfaction
+2)  To provide highest level of assurance and guarantee
+3)  Timely product delivery
+4)  To make profit
+
+ In order to make SafeHome features standardized and concurrent with user's requirements we will also have to consider the followings: 
+1)  Completeness - The SafeHome system we develop has all the function specified in the function requirements below.
+2)  Reliability - The SafeHome system we develops provide reliable services for all the function even in an emergency or an unexpected situation.
+3)  Simplicity - We follow the basic principle, "Keep It Simple," in the entire process framework: communication, planning, modeling, construction and deployment. So the entire development process is not very complex and the time to process the work is managed within the planned schedule.
+4)  Customized service - The SafeHome system should be configured for a specific homeowners' environment considering the house, life pattern, and personal requirements.
+5)  User-friendliness - The SafeHome system has user-friendly interface that homeowners can access anywhere, anytime with ease.
+
+3. Major Functionalities
+¡¡1) Security Management
+¡¡The security functions in SafeHome product allows the homeowner to arm/disarm system through the control panel or through the web browser and enables the homeowner to respond to an unauthorized access monitored by sensors such as window sensors, door sensors and motion sensors. It also provides functions such as creating and managing safety zone, changing the master password, and configuring system settings such as delay time, master password, guest password, phone number.
+¡¡To arm/disarm the system the user has to use passwords to authenticate his identity. The home may be set to any of these statuses like away, home, extend travel, overnight travel. The user can arm/disarm specific safety zones too.
+¡¡When there is an authorized access monitored by sensors, the system will raise an audible alarm and call for monitoring service to provide information about the location and report the nature of the event that has been detected. It also will display alarm message on the control panel as well as on the web application of SafeHome product. The user can use panic buttons any time on the control panel to call monitoring service in emergency situations. 
+
+¡¡2) Surveillance Management
+¡¡The surveillance function in SafeHome product facilitates the homeowner to observe the house locally and/or remotely. The user can view cameras by selecting from a thumbnail or floor plan, zoom or pan cameras, enable/disable them, and restrict access to specific cameras. 
+
+
+¡¡4. Plan for Project
+¡¡The project will proceed following the concept of incremental software development model. The security functions, surveillance functions and the web access functions which are the core of the SafeHome product will be developed in the first increment. Other functions such as home management functions - controlling the wireless electronic devices - will be developed in the later increments.
+
+Plan for first increment
+Beginning of the project		 		Apr 10, 2007
+Initial requirement gathering			Apr10 - April 16, 2007
+Planning and creating analysis model		Apr 10 - May 2, 2007
+Creating design model				May 3 - May 21, 2007
+Construction & testing				May 22 - May 31, 2007
+Testing & bug fixing				Jun 1 - Jun 7, 2007
+First deployment					Jun 7, 2007 - 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+II. GUI
+
+¡¡Control Panel: 
+¡¡
+
+
+
+
+
+¡¡SafeHome Login Screen
+¡¡
+
+
+
+
+
+¡¡SafeHome MainFunctions
+¡¡
+
+
+
+
+
+¡¡Security Function - Safety zone
+¡¡
+
+¡¡
+¡¡
+¡¡Security Function - Security Mode
+¡¡
+
+¡¡
+¡¡Surveillance Function.
+¡¡
+
+III. Assumptions
+
+1. camera monitoring zone in page 164 is defined as camera pan/zoom control
+2. Floor plan configuration and hardware deployment is complete and out of the scope of our project.
+3. Reconfiguring floor plan or relocating the sensors or cameras are not in the scope of our project.
+4. "set alarm" on page 223 is setting delay time defined in the use case "configure system setting"
+5. "configure SafeHome system parameters" on page 223 is defined as "configure system setting"
+6. "encounters an error condition" on page 195 is not defined as an use case but is described in exceptions of each use cases
+7. reconfigure sensors on page 195 is considered as setting floor plan which is not in the scope of our project.
+8. "system administrator" in our use case scenarios is not a person who is in charge of managing the system. It is the system itself acting as a facilitator for the use of system functionalities.
+9. Doggie angst sensor on page 332 is considered to be implemented in the next increment 
+10. Enable/test/read/disable sensors on page 448 is for test cases. We only control sensors through changing house safety situation or by arming/disarming safety zones.
+11. We do not consider web pages selling product on page 519
+12. We added function to view intrusion log on the web page
+13. We added enabling and disabling all the cameras
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+IV. Use case diagram
+¡¡1. Common Functions
+
+¡¡
+2. Security Functions
+¡¡
+
+
+
+
+
+
+
+
+
+¡¡
+3. Configure Safety Zone Functions
+¡¡
+
+
+¡¡
+4. Surveillance Functions
+¡¡
+
+
+
+
+
+
+
+
+
+V. Use Cases
+¡¡1. Common Use Cases							
+¡¡¡¡¡¡a. Log onto the system through control panel			
+¡¡¡¡¡¡Use case: 		Log onto the system through control panel 
+¡¡¡¡¡¡Primary actor: 		Homeowner, Guest
+¡¡¡¡¡¡Goal in context:	To log onto the SafeHome system through control panel
+Preconditions: 	System has been configured. Appropriate password must be obtained.
+¡¡¡¡¡¡Trigger: 		The homeowner/guest decides to log onto the system.
+¡¡¡¡¡¡Scenario: 
+1. The homeowner/guest uses the control panel.
+2. The homeowner/guest enters master/guest password. (4 digits password)
+3. The system validates password.
+4. The system shows accessible functions on the control panel.
+¡¡¡¡¡¡Exception:
+¡¡3a. Password incorrect or not recognized.
+ .1: The system asks for password again.
+¡¡¡¡.2: If the homeowner/guest enters incorrect or unrecognizable password three 
+          times in a row the system locks itself for predefined time.
+4a. An alarm condition is encountered - see use case: "alarm condition encountered" 
+¡¡¡¡¡¡Priority: 		High priority, basic functions.
+¡¡¡¡¡¡When available: 	First increment.
+¡¡¡¡¡¡Frequency of use: 	Frequent.
+¡¡¡¡¡¡Channel to actor: 	control panel
+¡¡¡¡¡¡Secondary actors: 	System administrator
+¡¡¡¡¡¡Channel to secondary actors:
+1. System administrator: PC-based system
+¡¡¡¡¡¡Open issues: 
+1. What mechanisms protect unauthorized use of this capability by employees 
+¡¡¡¡of the company?
+¡¡¡¡¡¡Reference in SEPA: 192, 232, 251, 252
+
+
+
+
+
+
+
+
+
+
+
+
+
+¡¡¡¡¡¡b. Log onto the system through web browser	
+¡¡¡¡¡¡Use Case :		Log onto the System through web browser
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	To log onto the SafeHome System through web browser
+Preconditions:	System should be ready, and internet should be set; appropriate user ID and passwords must be obtained.
+Trigger:			Homeowner decides to log onto the system.
+¡¡¡¡¡¡Scenario:	
+1. The homeowner connects SafeHome web page.
+2. The homeowner enters user ID.
+3. The homeowner enters two level passwords, each have 8 characters.
+4. The system validates the password 
+5. The system displays all major function buttons and home safety status.
+¡¡¡¡¡¡Exceptions: 
+¡¡4a. ID/password incorrect or not recognized.
+       .1: The system asks for ID/password again.
+¡¡¡¡.2: If the homeowner enters incorrect or unrecognizable ID/password three 
+          times in a row the system locks itself for predefined time.
+5a. An alarm condition is encountered - see use case: "alarm condition encountered"
+¡¡¡¡¡¡Priority:		Essential, must be implemented.
+¡¡¡¡¡¡When available:	First increment
+¡¡¡¡¡¡Frequency of use:	Many times per day
+¡¡¡¡¡¡Channel to actor:	Through internet
+¡¡¡¡¡¡Secondary actor:	Support technician, Webmaster, System administrator
+¡¡¡¡¡¡Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.	
+3. System administrator: PC-based system
+¡¡¡¡¡¡Open Issues:
+1. What mechanisms protect unauthorized use of this capability by employees of the company?
+2. Is security sufficient? Hacking into this feature would represent a major invasion of privacy.
+3. Do we need additional password to access the system from remote location?
+Reference in SEPA: 164, 190, 195, 219, 222, 224, 225
+
+
+
+
+
+
+
+
+¡¡¡¡¡¡
+¡¡¡¡¡¡c. Configure system setting
+¡¡¡¡¡¡Use Case:		Configure system setting
+¡¡¡¡¡¡Primary actor:		Homeowner
+Goal In Context:	To set the system configurations - delay time, web password, master and guest password for control panel, and phone number for panic status.
+Preconditions:	System's hardware component should be installed, and internet should be set; appropriate user ID and passwords must be obtained.
+¡¡¡¡¡¡Trigger:		Homeowner wants to set or initialize his system setting.
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system - see use case : "Log onto the system through web browser"
+2. The homeowner selects "configure system setting" from the major function buttons.
+3. The system shows a form, which contains six major fields, two web passwords and reconfirmation field, master password and reconfirmation field, guest password and reconfirmation field, delay time for alarm event and phone number for panic. Each field contains information which is defined before by the homeowner or seller. Guest password can have no value.
+4. The homeowner changes the value of fields as he desires.
+5. The homeowner press "submit" button to confirm the information.
+6. The system shows success message.
+¡¡¡¡¡¡Exceptions: 
+6a. There is an empty field except guest password - The system shows an error message and goes to procedure 3 in the scenario.
+ 6b. delay time is less than 5 minutes - The system shows an error message and goes back to procedure 3 in the scenario.
+¡¡¡¡¡¡Priority:		Essential, must be implemented.
+	When available:	First increment	
+       Frequency of use:	Many times per day
+       Channel to actor:	Through internet
+       Secondary actor:	Support technician, Webmaster.
+       Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+¡¡¡¡¡¡Reference in SEPA: 164, 222, 223, 227, 232, 368
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡d. Turn the system on
+¡¡¡¡¡¡Use Case :		Turn the system on
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	To turn the system on
+Preconditions:		Hardware components should be set.
+¡¡¡¡¡¡Trigger:		Homeowner decides to turn the SafeHome system on.
+¡¡¡¡¡¡Scenario:
+1. The homeowner reaches the control panel of the system.
+2. The homeowner presses "On" button.
+3. The system turns on and begins to boot.
+4. The system displays blinking "starting system" and "please wait" message to the screen 
+5. The system finishes booting. 
+6. The system displays steady "inactive" and "ready" message to the screen of the control panel.
+¡¡¡¡¡¡Exception:
+3a. The system fails to boot itself: the system displays error message and the power goes off.
+¡¡¡¡¡¡Priority: 		Essential
+¡¡¡¡¡¡When available: 	First increment
+¡¡¡¡¡¡Frequency of use: 	Infrequent. 
+¡¡¡¡¡¡Channel to actor: 	control panel
+¡¡¡¡¡¡Secondary actor: 	System administrator
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system
+¡¡¡¡¡¡Open issues:
+1. If the control panel is wirelessly connected to the system, how can we use the control panel to start the system?
+2. Should we need to log on to start the system?
+3. What if the system fails to boot?
+¡¡¡¡¡¡Reference in SEPA: 193, 231
+¡¡¡¡¡¡
+e. Turn the system off
+¡¡¡¡¡¡Use Case:		Turn the system off
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	To turn the system off
+Preconditions:		System should be ready.
+¡¡¡¡¡¡Trigger:		Homeowner decides to turn the SafeHome system off.
+¡¡¡¡¡¡Scenario:
+1. The homeowner reaches the control panel on the system.
+2. The homeowner logs onto the system - see use case "log onto the system through control panel".
+3. The homeowner presses "Off" button.
+4. The system displays "stopping system" and "please wait" message.
+5. The system stops recording camera, and save data.
+6. The system turns off.
+¡¡¡¡¡¡Exception:		none.
+ Priority: 		Essential
+       When available: 	First increment
+¡¡¡¡¡¡Frequency of use: 	Infrequent. 
+¡¡¡¡¡¡Channel to actor: 	Wired control panel
+¡¡¡¡¡¡Secondary actor: 	System administrator
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system
+¡¡¡¡¡¡Open issues:
+1. What if there are some web accesses to the system before the turn-off
+2. What if the system is turned off by unplugging
+¡¡¡¡¡¡Reference in SEPA: 193, 231
+¡¡¡¡¡¡
+f. Reset the system
+¡¡¡¡¡¡Use Case:		Reset the system 
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	Let the homeowner to reset the system
+Preconditions:		System should be ready.
+Trigger:		Homeowner wants to reset the SafeHome system.
+¡¡¡¡¡¡Scenario:
+1. The homeowner reaches the wired control panel on the system.
+2. The homeowner logs on - see use case "log onto the system through control panel".
+3. The homeowner presses "Reset" button.
+4. The system displays "resetting system" and "please wait" message.
+5. The system stops the devices and save the data.
+6. The system turns off.
+7. The system turns on. - see use case "Turn the system on"
+¡¡¡¡¡¡Exception:		none.
+¡¡¡¡¡¡Priority: 		Essential
+¡¡¡¡¡¡When available: 	First increment
+¡¡¡¡¡¡Frequency of use: 	Infrequent. 
+¡¡¡¡¡¡Channel to actor: 	Control panel
+¡¡¡¡¡¡Secondary actor: 	System administrator
+   Channels to secondary actors: 
+1. PC-based system
+¡¡¡¡¡¡Open issues:
+1. What if there are some web accesses to the system before the turn-off
+¡¡¡¡¡¡Reference in SEPA: 193, 231
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡g. Change master password through control panel
+¡¡¡¡¡¡Use-case: 		Change master password through control panel
+Primary Actor: 	Homeowner
+¡¡¡¡¡¡Goal in context:	To change master password for control panel
+Precondition: 	The system is running. Proper master password must be obtained
+¡¡¡¡¡¡Trigger: 		The homeowner decides to change the master password
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system through control panel - see use case: "Log onto the system through control panel."
+2. The homeowner presses code button to change the password.
+3. The system asks for current password.
+4. The homeowner enters current password.
+5. The system asks for new password.
+6. The homeowner enters new password.
+7. The system asks to reconfirm new password again.
+8. The homeowner reenters new password.
+9. The system changes the master password.
+¡¡¡¡¡¡Exception:
+¡¡4a. The homeowner pressed incorrect or invalid password
+¡¡¡¡.1: The system asks for password again.
+¡¡¡¡.2: If the homeowner/guest enters incorrect or unrecognizable password three 
+          times the system homeowner to log off the system.
+8a. The homeowner's reconfirmation password doesn't match - the system sends "password mismatch" message and moves on to scenario step 5.
+1-9. An alarm condition is encountered - see use case: "alarm condition encountered."
+       Priority: 		Essential
+¡¡¡¡¡¡Frequency of use:	Frequent
+¡¡¡¡¡¡Channel to actor: 	Control panel
+¡¡¡¡¡¡Secondary actor: 	System administrator
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system
+¡¡¡¡¡¡Open issues:
+1. Should we let the guest change his/her password like the master password?
+¡¡¡¡¡¡Reference in SEPA: 193
+
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+¡¡¡¡¡¡
+
+¡¡2. Security Use Cases
+¡¡¡¡¡¡a. Arm/disarm system through control panel
+¡¡¡¡¡¡Use case: 		Arm/disarm system through control panel
+¡¡¡¡¡¡Primary Actor: 	Homeowner
+¡¡¡¡¡¡Goal in context:	To change house status to home or away
+Precondition: 	The system is running. Proper master password must be obtained
+¡¡¡¡¡¡Trigger: 		The homeowner decides to change the house safety status
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system through control panel - see use case: "Log onto the system through control panel."
+2. The homeowner presses home/away button to change the safety status.
+3. The system activates/deactivates sensors according to home/away condition.
+4. The homeowner observes red light indicating armed or green light indicating disarmed on the control panel
+¡¡¡¡¡¡Exception:
+2a. The homeowner pressed away button and the doors or windows to be armed are not closed - control panel displays message "doors and windows not closed," with a beep sound and does nothing.
+1-4. An alarm condition is encountered - see use case: "alarm condition encountered."
+       Priority: 		Essential
+¡¡¡¡¡¡Frequency of use: 	frequent
+¡¡¡¡¡¡Channel to actor: 	control panel
+Secondary actor: 	System administrator, Sensors (door, window and motion detection)
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system
+2. Sensors: wireless connectivity
+¡¡¡¡¡¡Open issues:
+1. What mechanisms protect unauthorized use of this capability by employees of the company?
+¡¡¡¡¡¡Reference in SEPA: 164, 195
+¡¡¡¡¡¡
+b. Arm/disarm system through web browser
+¡¡¡¡¡¡Use case: 		Arm/disarm system through web browser
+¡¡¡¡¡¡Primary Actor:	Homeowner
+¡¡¡¡¡¡Goal in context:	To change house status via web browser
+Precondition: 	The system is running. Proper user ID and password must be obtained
+¡¡¡¡¡¡Trigger: 		The homeowner decides to change the house safety status
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system through web browser - see use case "Log onto the SafeHome system through web browser."
+2. The homeowner selects "Security" from major function buttons.
+3. The homeowner enters his/her address or phone number to reconfirm his/her identity.
+4. The system displays function-buttons for security.
+5. The homeowner selects "Set SafeHome mode" from function buttons.
+6. The system displays current house safety situation and buttons for available statuses: home, away, overnight travel, extended travel, arm all system, and disarm all system. 
+7. The homeowner selects new status.
+8. The system applies new status to the entire system and displays success message.
+¡¡¡¡¡¡Exception:
+¡¡3a. Address or phone number is incorrect or not recognized.
+¡¡¡¡.1: The system asks for address or phone number again.
+.2: If the homeowner/guest enters incorrect or unrecognizable address or phone number three times in a row the system locks itself for predefined time.
+7a. The homeowner choose to arm the system and the doors or windows to be armed are not closed - system displays message "doors and windows not closed."
+1-8. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡Priority: 		Essential
+¡¡¡¡¡¡Frequency of use: 	frequent
+¡¡¡¡¡¡Channel to actor: 	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor: 	System administrator, Sensors and cameras
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system
+2. Sensors and cameras: wireless connectivity
+¡¡Open issues:
+1. What mechanisms protect unauthorized use of this capability by employees of the company?
+Reference in SEPA: 164, 190, 195, 245, 374
+c. Arm/disarm safety zone selectively
+Use case: 		Arm/disarm safety zone selectively
+¡¡¡¡¡¡Primary Actor: 	Homeowner
+¡¡¡¡¡¡Goal in context:	To arm/disarm safety zone selectively
+Precondition: 	The system is running. Proper user ID and password must be obtained. The safety zone should be configured.
+Trigger: 	The homeowner decides to arm/disarm safety zone selectively
+¡¡¡¡¡¡Scenario:
+1. The home owner logs onto the system - see use case: "Log onto the system through web browser."
+2. The homeowner selects "Security" from major function buttons.
+3. The homeowner enters address or phone number to reconfirm identity.
+4. The system displays function buttons for security.
+5. The homeowner selects "Safety Zone" from function buttons.
+6. The system displays function buttons for safety zone, and floor plan with safety zones, status and their corresponding names. 
+7. The homeowner selects a safety zone on the floor plan and press arm/disarm button.
+8. The system arms/disarms selected safety zone.
+¡¡¡¡Exception:
+ 3a. Address or phone number is incorrect or not recognized.
+¡¡¡¡¡¡.1: The system asks for address or phone number again.
+.2: If the homeowner/guest enters incorrect or unrecognizable address or phone number three times in a row the system locks itself for predefined time.
+7a. The doors or windows to be armed in the safety zone are not closed - system displays message "doors and windows not closed."
+8a. The safety zones are not configured - see use case: "configure safety zone."
+1-8. An alarm condition is encountered - see use case: "alarm condition encountered."
+     Priority: 		Essential
+     Frequency of use: 	infrequent
+     Channel to actor: 	PC-based system with web browser
+     Secondary actor: 	System administrator, Sensors
+     Channels to secondary actors: 
+1. System administrator: PC-based system
+2. Sensors: wireless connectivity
+   Open issue:
+1. What mechanisms protect unauthorized use of this capability by employees of the company?
+Reference in SEPA: 164, 190, 195
+
+
+
+
+
+¡¡¡¡¡¡d. Alarm condition encountered
+¡¡¡¡¡¡Use case: 		Alarm condition encountered
+¡¡¡¡¡¡Primary actor: 		Sensors (door, window and motion detect)
+¡¡¡¡¡¡Goal in context:	Encounters an error condition.
+Preconditions: 	System must be fully configured and armed; error condition has been defined.
+Trigger: 	The sensor encounter unauthorized access and it raises some alarm, message. 
+¡¡¡¡¡¡Scenario: 
+1. The sensor detects unauthorized access.
+2. The system detects the sensor's intrusion event by polling.
+3. The system. invokes an audible alarm attached to the system and displays alarm condition on the control panel
+4. The system records the event on the database.
+5. After delaying time specified by the homeowner, the system dials a telephone number of a monitoring service to provide information about the location and report the nature of the event that has been detected
+¡¡¡¡¡¡Exceptions: 
+1a. Sensors are broken - encounters an error condition and reports to the monitoring service
+5a. The phone call to monitoring service fails - try to call the service again every 20 seconds until the call succeeds. 
+5b. The homeowner disarms the system within the time delay - the system doesn't call the monitoring service, and see use case "Arm/disarm system through control panel" and "Arm/disarm system through web browser."
+5c. The homeowner uses panic function within the time delay - see use case : "Call monitoring service through control panel"
+¡¡¡¡¡¡Priority: 		High priority, to be implemented after basic functions.
+¡¡¡¡¡¡When available: 	first increment.
+¡¡¡¡¡¡Frequency of use: 	infrequent.
+¡¡¡¡¡¡Channel to actor: 	wireless connectivity.
+¡¡¡¡¡¡Secondary actors: 	Homeowner, Alarm System, monitoring service
+¡¡¡¡¡¡Channel to secondary actors:
+1. Homeowner: Control panel or PC-based system with web browser
+2. Alarm System: Wireless connectivity, telephone line
+3. Monitoring service: Telephone line.
+¡¡¡¡¡¡Open issue:
+1. What if the sensors are broken? 
+2. What if cats or dogs invoke alarm event?
+3. What if the wireless connection is interrupted by an intruders disturbance radio wave?
+¡¡¡¡¡¡Reference in SEPA: 195, 222, 228, 231, 332
+¡¡¡¡¡¡
+e. configure safety zone
+¡¡¡¡¡¡Use case: 		Configure safety zone
+¡¡¡¡¡¡Primary Actor: 	Homeowner
+¡¡¡¡¡¡Goal in context:	To configure safety zone
+Precondition: 	The system is running. Proper user ID and password must be obtained
+¡¡¡¡¡¡Trigger: 		The homeowner decides to configure safety zone
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system through web browser - see use case: "Log onto the system through web browser."
+2. The homeowner selects "Security" from major function buttons.
+3. The homeowner inputs his/her address or phone number to reconfirm his/her identity.
+4. The system displays function-buttons for security.
+5. The homeowner selects "Safety Zone" from function buttons.
+6. The system displays function-buttons for safety zone, and floor plan with existing safety zones, status and their corresponding names. 
+7. The homeowner selects create new safety zone, delete safety zone, or update safety zone to access functionalities - see use case "Create new safety Zone," "Delete new safety Zone," "Update existing safety Zone" for each.
+8. The system saves new security zone configured by the homeowner.
+¡¡¡¡¡¡Exception:
+   3a. Address or phone number is incorrect or not recognized.
+¡¡¡¡.1: The system asks for address or phone number again.
+.2: If the homeowner/guest enters incorrect or unrecognizable address or phone number three times in a row the system locks itself for predefined time.
+   6a. The safety zones are not configured - see use case: "configure safety zone."
+1-8. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡Priority:		Essential
+¡¡¡¡¡¡Frequency of use: 	infrequent
+¡¡¡¡¡¡Channel to actor: 	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor: 	System administrator
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system
+¡¡¡¡¡¡Reference in SEPA: 164, 190, 195, 374
+¡¡¡¡¡¡
+f. Create new safety zone
+¡¡¡¡¡¡Use case: 		Create new safety zone
+¡¡¡¡¡¡Primary Actor: 	Homeowner
+¡¡¡¡¡¡Goal in context:	To add new safety zone
+Precondition: 	The system is running. Proper user ID and password must be obtained. The user logged on the Safety Zone function. The system displays function-buttons for safety zone, and floor plan with existing safety zones, status and their corresponding names -See scenario from 1 to 7 of use case: "Configure Safety Zone"
+¡¡¡¡¡¡Trigger: 		The homeowner decides to add a new safety zone
+¡¡¡¡¡¡Scenario:
+1. The Homeowner select the new safety zone button 
+2. The homeowner selects a zone on the floor plan by dragging the mouse or by clicking the security devices and names the zone.
+3. The homeowner selects finish button.
+4. The system saves new security zone configured by the homeowner.
+¡¡¡¡¡¡Exception:
+   2a. The safety zones are not configured - see use case: "configure safety zone."
+3a. New safety zone is same with an existing safety zone - the system displays "same safety zone exists" message.
+3b. None of the zones and devices is selected or zone name is not typed - the system displays "Select new safety zone and type safety zone name" message.
+1-4. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡Priority: 		Moderate priority.
+¡¡¡¡¡¡Frequency of use: 	infrequent
+¡¡¡¡¡¡Channel to actor: 	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor: 	System administrator, sensors
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system
+2. Sensors: wireless connectivity
+¡¡¡¡¡¡Open issue:
+1. Should we limit the number of safety zones that the homeowner can configure?
+¡¡¡¡¡¡Reference in SEPA: 164
+¡¡¡¡¡¡
+g. Delete safety zone
+¡¡¡¡¡¡Use case: 		Delete safety zone
+¡¡¡¡¡¡Primary Actor: 	Homeowner
+¡¡¡¡¡¡Goal in context:	To delete an exist safety zone
+Precondition: 	The system is running. Proper user ID and password must be obtained. The user logged on the Safety Zone function. The system displays function-buttons for safety zone, and floor plan with existing safety zones, status and their corresponding names - See scenario from 1 to 7 of use case: "Configure Safety Zone"
+¡¡¡¡¡¡Trigger: 		The homeowner decides to delete a new safety zone
+¡¡¡¡¡¡Scenario:
+1. The homeowner selects a safety zone on the floor plan. 
+2. The homeowner selects delete zone button.
+3. The system asks for confirmation of the deletion operation.
+4. The homeowner confirms deletion.
+5. The system deletes the safety zone
+¡¡¡¡¡¡Exception:
+   1a. The safety zones are not configured - see use case: "configure safety zone."
+2a. The homeowner didn't select any safety zone- the system displays "choose a safety zone for deletion" message.
+1-5. An alarm condition is encountered - see use case: "alarm condition encountered."
+     Priority: 		Moderate priority.
+¡¡¡¡¡¡Frequency of use: 	infrequent
+¡¡¡¡¡¡Channel to actor: 	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor: 	System administrator, sensors
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system
+2. Sensors: wireless connectivity
+¡¡¡¡¡¡Reference in SEPA: 164
+¡¡¡¡¡¡
+h. Update an exist safety zone
+¡¡¡¡¡¡Use case: 		Update an exist safety zone
+¡¡¡¡¡¡Primary Actor: 	Homeowner
+¡¡¡¡¡¡Goal in context:	To update an exist safety zone
+Precondition: 	The system is running. Proper user ID and password must be obtained. The user logged on the Safety Zone function. The system displays function-buttons for safety zone, and floor plan with existing safety zones, status and their corresponding names - See scenario from 1 to 7 of use case: "Configure Safety Zone"
+¡¡¡¡¡¡Trigger: 		The homeowner decides to update an exist safety zone
+¡¡¡¡¡¡Scenario:
+1. The homeowner selects an existing safety zone on the floor plan.
+2. The homeowner selects update safety zone button.
+3. The homeowner selects a zone for this safety zone on the floor plan by dragging the mouse or by clicking the security devices.
+4. The homeowner selects finish button.
+5. The system saves update information for the security zone.
+¡¡¡¡¡¡Exception:
+   1a. The safety zones are not configured - see use case: "configure safety zone."
+2a. The homeowner didn't select any safety zone- the system displays "choose a safety zone for updating" message.
+1-5. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡Priority: 		Moderate priority.
+¡¡¡¡¡¡Frequency of use:	Infrequent
+¡¡¡¡¡¡Channel to actor:	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor: 	System administrator, sensors
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system
+2. Sensors: wireless connectivity
+¡¡¡¡¡¡Reference in SEPA: 164
+¡¡¡¡¡¡
+i. Configure SafeHome modes
+¡¡¡¡¡¡Use Case:		Configure SafeHome modes 
+¡¡¡¡¡¡Primary actor:		Homeowner
+Goal In Context:	To redefine the configureation of system for each mode through the web
+Preconditions:	System should be ready, and internet should be set; appropriate user ID and passwords must be obtained.
+¡¡¡¡¡¡Trigger:		Homeowner decides to change security modes for sensors.
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system - see "Log onto the system through web browser"
+2. The homeowner selects "security" from the major function buttons.
+3. The homeowner inputs address or phone number to reconfirm identity.
+4. The homeowner selects "Redefine security modes" button.
+5. The system shows five buttons each named "Home", "Away", "Overnight Travel", "Extended Travel", "Guest Home", and floor plan which represents every function.
+6. The homeowner selects a button to redefine one of the modes. 
+7. The sensors which is in the definition of the mode is marked on the floor plan.
+8. The homeowner selects or deselects sensors.
+9. The homeowner selects the "Save" button to save the changed definition.
+10. The system displays the success message for the change of definition of mode.
+¡¡¡¡¡¡Exceptions: 
+2a. Security function not configured for this system - system displays appropriate error message; see use-case: "Configure system setting"
+¡¡3a. Password incorrect or not recognized.
+¡¡¡¡.1: The system asks for password again.
+¡¡¡¡.2: If the homeowner/guest enters incorrect or unrecognizable password three 
+          times in a row the system locks itself for predefined time.
+5a. A floor plan is not available or has not been configured - display appropriate error message and see use-case: "configure floor plan." (not in the scope of our project)
+¡¡8a. The homeowner selects another mode button 
+¡¡¡¡¡¡.1 System asks whether to save or not changed definition, 
+.2 If the homeowner selects "Save", then save the changed setting and show success message. If the homeowner selects "Cancel", then do not save.
+ .3 The system shows sensors which is in the selected mode - goes Procedure 6
+   9a. The homeowner selects "Cancel" - Do not save the change of definition.
+1-10. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡When available:	First increment
+ Frequency of use:	once a month or rare
+¡¡¡¡¡¡Channel to actor:	PC-based system with web browser
+Secondary actor:	Support technician, Webmaster, Sensor, System  administrator
+¡¡¡¡¡¡Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+3. Sensor: wireless connection
+4. System administrator: PC-based system
+¡¡Reference in SEPA: 164, 195, 245, 374
+
+¡¡¡¡¡¡
+j. View intrusion log
+¡¡¡¡¡¡Use Case:		View intrusion log
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	To view the intrusion log through web browser
+Preconditions:		System should be ready, internet should be set. Appropriate 		user ID and passwords must be obtained
+¡¡¡¡¡¡Trigger:		Homeowner wants to view the intrusion log.
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system - see use case : "Log onto the System through web browser"
+2. The homeowner selects "security" from the major function buttons.
+3. The homeowner enters address or phone number to reconfirm identity.
+4. The homeowner selects "View Intrusion Logs".
+5. The system shows the user the saved intrusion log.
+¡¡¡¡¡¡Exceptions: 
+   3a. Address or phone number is incorrect or not recognized.
+   .1: The system asks for address or phone number again.
+.2: If the homeowner/guest enters incorrect or unrecognizable address or phone number three times in a row the system locks itself for predefined time.
+1-5. An alarm condition is encountered - see use case: "alarm condition encountered."
+Priority:		Essential, must be implemented.
+¡¡¡¡¡¡When available:	First increment
+¡¡¡¡¡¡Frequency of use:	Many times per day
+¡¡¡¡¡¡Channel to actor:	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor:	Support technician, Webmaster.
+¡¡¡¡¡¡Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+¡¡¡¡¡¡Open issues:
+1. How can the system manage the old intrusion logs?
+2. How can the system display the recent unseen intrusion logs?
+¡¡¡¡¡¡Reference in SEPA: None. Our team's own assumption
+¡¡¡¡¡¡
+k. Call monitoring service through control panel
+¡¡¡¡¡¡Use Case :		Call monitoring service through control panel
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	Home owner calls monitoring service
+Preconditions:	System is running. The homeowner is in an emergency situation.
+¡¡¡¡¡¡Trigger:		Homeowner needs help from the monitoring service.
+¡¡¡¡¡¡Scenario:
+1. The homeowner reaches the control panel on the system.
+2. The homeowner presses "*"or "#" button.
+3. The system calls the monitoring service immediately and reports panic condition.
+¡¡¡¡¡¡Exception:
+3a. The system fails to call the monitoring service - call the monitoring service every 20 seconds until the call is made.
+¡¡¡¡¡¡Priority: 		Essential
+¡¡¡¡¡¡When available: 	First increment
+¡¡¡¡¡¡Frequency of use: 	Infrequent. 
+¡¡¡¡¡¡Channel to actor: 	Control panel
+¡¡¡¡¡¡Secondary actor: 	System administrator, monitoring service
+¡¡¡¡¡¡Channels to secondary actors: 
+1. System administrator: PC-based system, telephone line.
+2. Monitoring service: telephone line.
+¡¡¡¡¡¡Open issues:
+1. What if the homeowner or a child in the house uses panic function by mistake?
+2. What if the telephone line is disabled?
+3. What if the monitoring service gets down?
+   Reference in SEPA: 193
+
+
+¡¡¡¡
+3. Surveillance Use Cases
+¡¡¡¡¡¡a. Display Specific camera view
+Use Case:		Display Specific camera view
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	To see specific camera's view
+Preconditions:		System should be ready, and internet should be set; 				appropriate user ID and passwords must be obtained.
+Trigger:		Homeowner decides to take a look of a camera.
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system - see use case : "Log onto the system through web browser"
+2. The homeowner selects "surveillance" from the major function buttons.
+3. The homeowner selects "pick a camera"
+4. The system displays the floor plan of the house.
+5. The homeowner selects a camera icon from the floor plan
+6. The system asks a password if the selected camera has a password.
+7. The homeowner enters the password.
+8. The system validates the password. 
+9. The system displays the state of the selected camera.
+10. The homeowner selects the "view" button.
+11. The system displays video output within the viewing window at one frame per second.
+¡¡¡¡Exceptions: 
+2a. Surveillance function not configured for this system - system displays appropriate error message; see use-case: "Configure surveillance function"(not in the scope of our project)
+ 3a. Homeowner selects "all cameras" - see use-case: "view thumbnail snapshots"
+4a. A floor plan is not available or has not been configured--display appropriate error message and see use-case: "configure floor plan." (not in the scope of our project spec)
+ 6a. If the camera does not have a password, go to procedure 9.
+8a. The password is incorrect or not recognized - if input tries are less than three then prompts for reentry. Otherwise lock system for predefined time.
+8b. The password is incorrect or not recognized and no input tries are remain? The system prevent the homeowner from accessing the camera .
+10a. If the camera is disabled, "view" button is disabled - see use case : "Enable camera"
+1-11. An alarm condition is encountered - see use case: "alarm condition encountered."
+     When available:	First increment
+     Frequency of use:	Many times per day
+     Channel to actor:	PC-based system with web browser
+     Secondary actor:	Support technician, Webmaster, Camera
+     Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+3. Camera: wireless connectivity
+¡¡¡¡Open Issues:
+1. Will system response via the Internet be acceptable given the bandwidth required for camera views?
+2. Will we develop a capability to provide video at a higher frames-per-second rate when high bandwidth connections are available?
+3. What if the homeowner forgets the specific password for the camera?
+4. What if a specific camera is broken?
+¡¡¡¡Reference in SEPA: 164, 219, 220, 221, 222, 224, 225, 238, 336, 374
+
+
+¡¡¡¡¡¡
+b. Pan/Zoom specific camera view
+¡¡¡¡¡¡Use Case:		Pan/Zoom specific camera view
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	To pan/zoom a camera
+Preconditions:	System should be ready, and internet should be set; appropriate user ID and passwords must be obtained.
+¡¡¡¡¡¡Trigger:		Homeowner decides to pan or zoom a camera
+¡¡¡¡¡¡Scenario:
+1. The homeowner views specific camera - see use case : "Display specific camera view"
+2. Press "In", "Out" to zoom the camera, "L" or "R" to pan the camera
+¡¡¡¡¡¡Exceptions: 
+1-2. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡When available:	First increment
+¡¡¡¡¡¡Frequency of use:	Many times per day
+¡¡¡¡¡¡Channel to actor:	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor:	Support technician, Webmaster, Camera
+¡¡¡¡¡¡Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+3. Camera: wireless connectivity
+¡¡¡¡¡¡Open Issues:
+1. What if the homeowner forgets the specific password for the camera?
+2. What if the camera is broken?
+3. What if the camera's movement is disabled my some obstacles?
+¡¡¡¡¡¡Reference in SEPA: 164, 219, 238, 336
+¡¡¡¡¡¡ 
+¡¡¡¡¡¡
+c. Set camera password
+Use Case:		Set camera password
+¡¡¡¡¡¡Primary actor:		Homeowner
+Goal In Context:	Let the homeowner to be able to change each camera's password
+Preconditions:	System should be ready, and internet should be set; appropriate user ID and passwords must be obtained.
+Trigger:	Homeowner wants to change one of surveillance camera's password
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system - see use case : "Log onto the system through web browser"
+2. The homeowner selects "surveillance" from the major function buttons.
+3. The homeowner selects "pick a camera"
+4. The system displays the floor plan of the house.
+5. The homeowner selects a camera icon from the floor plan
+6. The system asks a password if the selected camera has a password.
+7. The homeowner enters the password.
+8. The system validates the password. 
+9. The system displays the state of the selected camera.
+10. The homeowner select "set password" buttons.
+11. The system asks an old password.
+12. The homeowner enters an old password.
+13. The system validate the old password
+14. The system asks a new password.
+15. The homeowner enters a new password twice.
+16. The system set a new password for the selected camera.
+¡¡¡¡¡¡Exceptions: 
+2a. Surveillance function not configured for this system - system displays appropriate error message; see use-case: "Configure surveillance function"(not in the scope of our project)
+3a. Homeowner selects "all cameras" - see use-case: "view thumbnail snapshots for all cameras."
+4a. A floor plan is not available or has not been configured - display appropriate error message and see use-case: "configure floor plan." (not in the scope of our project)
+   6a. If the camera does not have a password, go to procedure 9.
+8a. The password is incorrect or not recognized and some input tries are remain - The  system prompts for reentry.
+8b. The password is incorrect or not recognized and no input tries are remain - The system prevent the homeowner from accessing the camera .
+   11a. There is no camera password - Go to procedure 14.
+15a. Two passwords are different each other - system shows error message and go to procedure 14.
+1-16. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡Priority:		Essential, must be implemented.
+¡¡¡¡¡¡When available:	First increment
+¡¡¡¡¡¡Frequency of use:	Many times per day
+¡¡¡¡¡¡Channel to actor:	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor:	Support technician, Webmaster, Camera.
+¡¡¡¡¡¡Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+3. Camera: wireless connectivity.
+¡¡¡¡¡¡Open Issues:
+1. What if the homeowner forgets the specific password for the camera?
+2. What if the camera is broken?
+3. What if the system is hacked and password is changed unintendly? How can we stop it effectively?
+   Reference in SEPA: 219
+
+¡¡¡¡¡¡
+d. Delete camera password
+¡¡¡¡¡¡Use Case:		Delete camera password
+¡¡¡¡¡¡Primary actor:		Homeowner
+Goal In Context:	Let the homeowner to be able to delete each camera's password
+Preconditions:	System should be ready, and internet should be set; appropriate user ID and passwords must be obtained.
+Trigger:	Homeowner wants to delete one of surveillance camera's password
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system - see use case : "Log onto the system through web browser"
+2. The homeowner selects "surveillance" from the major function buttons.
+3. The homeowner selects "pick a camera"
+4. The system displays the floor plan of the house.
+5. The homeowner selects a camera icon from the floor plan
+6. The system asks a password if the selected camera has a password.
+7. The homeowner enters the password.
+8. The system validates the password. 
+9. The system displays the state of the selected camera.
+10. The homeowner selects "delete password" button.
+11. The system asks an old password.
+12. The homeowner enters an old password.
+13. The system validate the old password
+14. The system erases the password for that camera.
+¡¡¡¡¡¡Exceptions: 
+2a. Surveillance function not configured for this system - system displays appropriate error message; see use-case: "Configure surveillance function"(not in the scope of our project)
+3a. Homeowner selects "all cameras" - see use-case: "view thumbnail snapshots for all cameras."
+4a. A floor plan is not available or has not been configured--display appropriate error message and see use-case: "configure floor plan." (not in the scope of our project)
+   6a. If the camera does not have a password, go to procedure 9.
+8a. The password is incorrect or not recognized and some input tries are remain? The  system prompts for reentry.
+8b. The password is incorrect or not recognized and no input tries are remain?The system prevent the homeowner from accessing the camera .
+   10a. There is no camera password - "delete password" button is disabled.
+1-14. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡Priority:		Essential, must be implemented.
+¡¡¡¡¡¡When available:	First increment
+¡¡¡¡¡¡Frequency of use:	Many times per day
+¡¡¡¡¡¡Channel to actor:	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor:	Support technician, Webmaster, Camera.
+¡¡¡¡¡¡Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+3. Camera: wireless connectivity.
+¡¡¡¡¡¡Open Issues:
+1. What if the homeowner forgets the specific password for the camera?
+2. What if the camera is broken?
+3. What if the camera is hacked? How can we stop it effectively?
+¡¡¡¡¡¡Reference in SEPA: 219
+
+
+¡¡¡¡¡¡
+e. View thumbnail Shots
+¡¡¡¡¡¡Use Case:		View thumbnail Shots
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	Let the Homeowner to see all camera's thumbnail shots
+Preconditions:	System should be ready, and internet should be set; appropriate user ID and passwords must be obtained.
+Trigger:	Homeowner decides to take a look of all camera's thumbnail shots
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system - see use case : "Log onto the system through web browser"
+2. The homeowner selects "surveillance" from the major function buttons.
+3. The homeowner selects "all cameras"
+4. The system displays thumbnail snapshots from all cameras simultaneously except the cameras with password
+¡¡¡¡¡¡Exceptions: 
+2a. Surveillance function not configured for this system - system displays appropriate error message; see use-case: "Configure surveillance function"(not in the scope of our project)
+3a. Homeowner selects "pick a camera" - see use-case: "Display specific camera view"
+1-4. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡When available:	First increment
+¡¡¡¡¡¡Frequency of use:	Many times per day
+¡¡¡¡¡¡Channel to actor:	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor:	Support technician, Webmaster, Camera
+¡¡¡¡¡¡Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+3. Camera: wireless connectivity
+¡¡¡¡¡¡Open Issues:
+1. Will system response via the Internet be acceptable given the bandwidth required for camera views?
+2. Will we develop a capability to provide video at a higher frames-per-second rate when high bandwidth connections are available?
+3. How does the system display the disabled cameras or password-locked cameras?
+¡¡¡¡¡¡Reference in SEPA: 219, 220, 222, 224, 225
+
+¡¡¡¡¡¡
+f. Enable camera
+¡¡¡¡¡¡Use Case:		Enable camera
+¡¡¡¡¡¡Primary actor:		Homeowner
+¡¡Goal In Context:	Let the homeowner to be able to enable specific camera
+Preconditions:	System should be ready, and internet should be set; appropriate user ID and passwords must be obtained.
+Trigger:		Homeowner wants to enable one of surveillance camera.
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system - see use case : "Log onto the system through web browser"
+2. The homeowner selects "surveillance" from the major function buttons.
+3. The homeowner selects "pick a camera"
+4. The system displays the floor plan of the house.
+5. The homeowner selects a camera icon from the floor plan
+6. The system asks a password if the selected camera has a password.
+7. The homeowner enters the password.
+8. The system validates the password. 
+9. The system displays the state of the selected camera.
+10. The homeowner selects the "enable" button.
+11. The system enables the camera.
+12. The system activates "disable" button, deactivates "enable" button.
+¡¡Exceptions: 
+ 10a. Camera is already enabled - "enable" button is already deactivated.
+1-12. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡Priority:		Essential, must be implemented.
+¡¡¡¡¡¡When available:	First increment
+¡¡¡¡¡¡Frequency of use:	Many times per day
+¡¡¡¡¡¡Channel to actor:	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor:	Support technician, Webmaster, Camera.
+¡¡¡¡¡¡Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+3. Camera: wireless connectivity.
+¡¡¡¡¡¡Open issues: 
+1. What if the homeowner forgets the specific password for the camera?
+2. What if the camera is broken?
+3. What if the connection to camera is interrupted by something?
+¡¡¡¡¡¡Reference in SEPA: Our assumption
+
+
+¡¡¡¡¡¡
+g. Disable camera
+¡¡¡¡¡¡Use Case:		Disable camera
+Primary actor:		Homeowner
+¡¡Goal In Context:	Let the homeowner to be able to disable specific camera
+Preconditions:	System should be ready, and internet should be set; appropriate user ID and passwords must be obtained.
+Trigger:	Homeowner wants to disable one of enabled surveillance camera.
+¡¡¡¡¡¡Scenario:
+1. The homeowner logs onto the system - see use case : "Log onto the system through web browser"
+2. The homeowner selects "surveillance" from the major function buttons.
+3. The homeowner selects "pick a camera"
+4. The system displays the floor plan of the house.
+5. The homeowner selects a camera icon from the floor plan
+6. The system asks a password if the selected camera has a password.
+7. The homeowner enters the password.
+8. The system validates the password. 
+9. The system displays the state of the selected camera.
+10. The homeowner selects the "disable" button.
+11. The system enables the camera.
+12. The system activates "enable" button, deactivates "disable" button.
+¡¡¡¡¡¡Exceptions: 
+10a. Camera is already disabled - "disable" button is already deactivated.
+1-13. An alarm condition is encountered - see use case: "alarm condition encountered."
+¡¡¡¡¡¡Priority:		Essential, must be implemented.
+¡¡¡¡¡¡When available:	First increment
+¡¡¡¡¡¡Frequency of use:	Many times per day
+¡¡¡¡¡¡Channel to actor:	PC-based system with web browser
+¡¡¡¡¡¡Secondary actor:	Support technician, Webmaster, Camera.
+¡¡¡¡¡¡Channels to secondary actors: 
+1. Support technician: phone line.
+2. Webmaster: E-mail.
+3. Camera: wireless connectivity
+¡¡¡¡¡¡Open issues: 
+1. What if the homeowner forgets the specific password for the camera?
+2. What if the camera is broken?
+3. What if the connection to the camera is interrupted?
+¡¡¡¡¡¡Reference in SEPA: Our assumption
+
+
+
+
+
+
+VI. Swimlane Diagram
+¡¡1. Common Swimlane Diagram						         
+a. Log onto the system through control panel	
+
+
+
+b. Log onto the system through web browser		        	           
+
+c. Configure system setting
+
+d. Turn the system on
+
+e. Turn the system off
+
+f. Reset the system
+
+
+¡¡¡¡¡¡g. Change master password through control panel
+¡¡¡¡
+¡¡
+2. Security Swimlane Diagram						         
+¡¡¡¡¡¡a. Arm/disarm system through control panel
+¡¡¡¡¡¡
+	b. Arm/disarm system through web browser	
+
+c. Arm/disarm safety zone selectively
+
+				           
+¡¡¡¡¡¡d. Alarm condition encountered					          
+
+e. Configure safety zone    
+
+f. Create new safety zone                        
+
+g. Delete safety zone	
+
+h. Update an exist safety zone					           
+
+i. Configure SafeHome modes
+		
+
+j. View intrusion log			
+
+¡¡¡¡¡¡k. Call monitoring service through control panel		          
+¡¡¡¡¡¡
+¡¡
+3. Surveillance Swimlane Diagram						         
+¡¡¡¡¡¡a. Display Specific camera view	
+¡¡¡¡¡¡
+b. Pan/Zoom specific camera view				           
+ 
+
+c. Set camera password	
+
+d. Delete camera password	
+
+e. View thumbnail Shots	
+
+
+
+		           
+¡¡¡¡¡¡f. Enable camera	
+¡¡¡¡¡¡
+	g. Disable camera
+
+
+
+
+VII. Who did what
+Dong-Hyun Choi1. Use case scenario for surveillance functions
+2. Use case scenario for common functions
+3. Swimlane diagram for surveillance functions
+4. Swimlane diagram for common functions
+5. Use case diagram
+6. Refinement of some use case scenario
+7. Refinement of swimlane diagram
+8. Finding reference from SEPA
+9. Writing overviewDong-Yun Yang1. Use case scenario for surveillance functions
+2. Use case scenario for common functions
+3. Swimlane diagram for surveillance functions
+4. Swimlane diagram for common functions
+5. Review use case diagram
+6. Refinement of use case scenario
+7. Refinement of swimlane diagram
+8. Finding reference from SEPA
+9. Writing overviewJi-Yong Shin1. Use case scenario for security functions
+2. Use case scenario for common functions
+3. Swimlane diagram for security functions
+4. Swimlane diagram for common functions
+5. Refinement of use case diagram
+6. Refinement of use case scenario
+7. Refinement of swimlane diagram
+8. Finding reference from SEPA
+9. Writing overviewPham Minh Duc1. Use case scenario for security functions
+2. Use case scenario for common functions
+3. Swimlane diagram for security functions
+4. Swimlane diagram for common functions
+5. Use case diagram
+6. Refinement of use case scenario
+7. Refinement of swimlane diagram
+8. Finding reference from SEPA
+9. Writing overviewSuraj Pandey1. Overview document concept, introduction, revision
+2. Use case diagram error identification
+3. Extra exceptions, error conditions suggestions
+
+
+
+5
+
+

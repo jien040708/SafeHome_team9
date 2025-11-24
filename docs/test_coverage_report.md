@@ -4,13 +4,13 @@
 | Item | Details |
 | --- | --- |
 | Command | `pytest --cov=. --cov-report=term --cov-report=json:coverage.json --cov-report=html` |
-| Result | ✅ 107 tests passed |
-| Duration | 28.62 s |
+| Result | 120 tests passed |
+| Duration | 27.82 s |
 | Python | 3.8.6 |
-| Timestamp | 2025-11-24 14:30:00 |
+| Timestamp | 2025-11-24 15:48:09 |
 
 ## Coverage Summary
-- Total statements: 4,607 • Missed: 1,835 • Overall coverage: **60%**
+- Total statements: 4,841 • Missed: 1,771 • Overall coverage: **63%**
 - Artifacts: `coverage.json`, `htmlcov/index.html`
 
 ## Full Coverage Results
@@ -23,24 +23,25 @@
 | `config/configuration_manager.py` | 188 | 69 | 63% |
 | `config/system_settings.py` | 65 | 10 | 85% |
 | `devices/__init__.py` | 0 | 0 | 100% |
-| `devices/camera.py` | 15 | 1 | 93% |
-| `devices/device_base.py` | 17 | 5 | 71% |
-| `devices/device_factory.py` | 15 | 15 | 0% |
-| `devices/motion_detector.py` | 11 | 5 | 55% |
+| `devices/camera.py` | 15 | 0 | 100% |
+| `devices/device_base.py` | 17 | 1 | 94% |
+| `devices/device_factory.py` | 60 | 7 | 88% |
+| `devices/motion_detector.py` | 11 | 0 | 100% |
 | `devices/siren.py` | 12 | 5 | 58% |
-| `devices/windoor_sensor.py` | 14 | 7 | 50% |
+| `devices/windoor_sensor.py` | 14 | 0 | 100% |
 | `domain/__init__.py` | 0 | 0 | 100% |
 | `domain/device_manager.py` | 54 | 11 | 80% |
-| `domain/notification_manager.py` | 21 | 21 | 0% |
-| `domain/system.py` | 236 | 112 | 53% |
+| `domain/services/__init__.py` | 0 | 0 | 100% |
+| `domain/services/auth_service.py` | 24 | 1 | 96% |
+| `domain/services/settings_service.py` | 32 | 1 | 97% |
+| `domain/system.py` | 247 | 105 | 57% |
 | `domain/system_controller.py` | 75 | 39 | 48% |
-| `domain/system_states.py` | 33 | 33 | 0% |
 | `domain/user_manager.py` | 16 | 8 | 50% |
 | `event_logging/__init__.py` | 0 | 0 | 100% |
 | `event_logging/log.py` | 44 | 12 | 73% |
 | `event_logging/log_manager.py` | 74 | 45 | 39% |
 | `interfaces/sensor_interface.py` | 11 | 3 | 73% |
-| `main.py` | 694 | 540 | 22% |
+| `main.py` | 713 | 560 | 21% |
 | `security/__init__.py` | 0 | 0 | 100% |
 | `security/events.py` | 21 | 0 | 100% |
 | `security/interfaces.py` | 33 | 7 | 79% |
@@ -53,6 +54,7 @@
 | `surveillance/safehome_camera.py` | 117 | 6 | 95% |
 | `tests/__init__.py` | 0 | 0 | 100% |
 | `tests/conftest.py` | 28 | 0 | 100% |
+| `tests/domain/test_services.py` | 99 | 0 | 100% |
 | `tests/surveillance_tests/__init__.py` | 0 | 0 | 100% |
 | `tests/surveillance_tests/conftest.py` | 11 | 2 | 82% |
 | `tests/surveillance_tests/test_camera_controller.py` | 207 | 1 | 99% |
@@ -62,6 +64,7 @@
 | `tests/test_configure_settings.py` | 58 | 0 | 100% |
 | `tests/test_control_panel_login.py` | 77 | 8 | 90% |
 | `tests/test_controller_security_flow.py` | 70 | 1 | 99% |
+| `tests/test_device_factory.py` | 58 | 0 | 100% |
 | `tests/test_first_password_lock.py` | 50 | 2 | 96% |
 | `tests/test_integration_api.py` | 24 | 0 | 100% |
 | `tests/test_time_based_lock.py` | 70 | 2 | 97% |
@@ -75,17 +78,16 @@
 | `utils/constants.py` | 13 | 0 | 100% |
 | `virtual_device_v3/device/__init__.py` | 0 | 0 | 100% |
 | `virtual_device_v3/device/safehome_sensor_test.py` | 81 | 74 | 9% |
-| **TOTAL** | **4,607** | **1,835** | **60%** |
+| **TOTAL** | **4,841** | **1,771** | **63%** |
 
 ## Observations
-- **Functional stability:** All automated tests pass, indicating no immediate regressions in exercised areas.
-- **Coverage concentration:** `main.py` and `ui/main_window.py` account for ~40% of all misses, so extracting logic into service modules would unlock more coverage.
-- **Untested state management:** `domain/system_controller.py` and `domain/system_states.py` lack direct tests, raising risk for arm/disarm flows.
-- **Device abstractions:** The factory and several sensors have minimal to zero coverage; adding regression tests would safeguard future device additions.
+- **Device layer hardened:** Camera, motion, and window sensors plus the new factory now carry 88-100% coverage with notifier behavior validated end-to-end.
+- **Main/UI still dominant gaps:** `main.py` and `ui/main_window.py` together contribute >60% of the remaining misses; logic needs extraction into service layers.
+- **Security orchestration risk:** `domain/system.py` and `domain/system_controller.py` hover below 60% with no direct state-transition tests, so regressions could slip through.
+- **Logging/notification remain dark:** `event_logging/log_manager.py` and `devices/siren.py` still lack regression tests, leaving alarm fan-out largely unverified.
 
 ## Recommendations
-1. Extract critical workflows from `main.py` / `ui/main_window.py` into services with injectable dependencies, then cover them via pytest.
-2. Add direct unit tests for `domain/system_states.py` and `domain/system_controller.py` to validate state transitions independent of UI flows.
-3. Create device factory tests that instantiate each device type and verify interface compliance.
-4. Expand logging and notification manager tests to ensure events persist and alerts trigger correctly.
-5. Keep using the documented `pytest --cov` command (and consider gating CI) so future coverage regressions are caught early.
+1. Continue Phase 1 refactors by extracting state/mode orchestration from `main.py` and covering the new services directly.
+2. Author targeted tests for `domain/system_controller.py` covering arm/disarm, mode errors, and observer wiring.
+3. Introduce persistence and failure-mode tests for `event_logging/log_manager.py` plus `devices/siren.py` activation paths.
+4. Keep the coverage command in CI so regressions, especially within UI/service seams, surface quickly.

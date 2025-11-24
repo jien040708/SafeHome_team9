@@ -5,9 +5,7 @@ from flask import Flask, render_template, request, jsonify, session, redirect, u
 
 from domain.system import System
 from ui.main_window import SafeHomeApp
-from devices.windoor_sensor import WindowDoorSensor
-from devices.motion_detector import MotionDetector
-from devices.camera import Camera
+from devices.device_factory import create_default_device_factory, DeviceFactoryError
 from utils.constants import *
 
 app = Flask(__name__, static_folder='virtual_device_v3', static_url_path='/static')
@@ -1189,6 +1187,43 @@ def open_camera_view_window(camera_id):
 def run_web():
     app.run(port=5000, debug=False, use_reloader=False)
 
+def _load_system_sensors(system: System):
+    """Instantiate sensor objects from the persisted catalog."""
+    factory = create_default_device_factory()
+    config = getattr(system, "configuration_manager", None)
+    device_records = []
+
+    if config and getattr(config, "device_manager", None):
+        try:
+            device_records = config.device_manager.load_all_devices()
+        except Exception as exc:  # pragma: no cover - defensive
+            print(f"[Main] Failed to load devices from database: {exc}")
+
+    sensors = []
+    for device_id, device_type in device_records:
+        try:
+            sensors.append(factory.create(device_type, device_id))
+        except DeviceFactoryError as exc:
+            print(f"[Main] Skipping device '{device_id}': {exc}")
+
+    if sensors:
+        return sensors
+
+    print("[Main] No registered devices available; using fallback defaults.")
+    fallback_records = [
+        ("Front Door", SENSOR_WIN_DOOR),
+        ("Living Room", SENSOR_MOTION),
+        ("Garden Cam", SENSOR_CAMERA),
+    ]
+
+    for device_id, device_type in fallback_records:
+        try:
+            sensors.append(factory.create(device_type, device_id))
+        except DeviceFactoryError as exc:  # pragma: no cover - defensive
+            print(f"[Main] Failed to create fallback device '{device_id}': {exc}")
+
+    return sensors
+
 def main():
     global safehome_system
     root = tk.Tk()
@@ -1200,18 +1235,14 @@ def main():
         return
 
     # Devices Init
-    sensors = [
-        WindowDoorSensor("Front Door"),
-        MotionDetector("Living Room"),
-        Camera("Garden Cam")
-    ]
+    sensors = _load_system_sensors(safehome_system)
     safehome_system.sensors = sensors
 
     # Connect Devices to SystemController
     if safehome_system.system_controller:
         for s in sensors:
             s.add_observer(safehome_system.system_controller)
-            if isinstance(s, Camera):
+            if s.get_type() == SENSOR_CAMERA and hasattr(s, "take_picture"):
                 safehome_system.system_controller.add_camera(s)
 
     # Initialize cameras in CameraController (3 cameras)

@@ -19,6 +19,8 @@ from devices.siren import Siren
 from security.security_system import SecuritySystem
 from security.events import SensorStatus
 from surveillance.camera_controller import CameraController
+from domain.services.auth_service import AuthService
+from domain.services.settings_service import SettingsService
 
 
 class SystemCameraGateway:
@@ -81,6 +83,8 @@ class System:
 
         # UI ??
         self.ui_app = None
+        self._auth_service: Optional[AuthService] = None
+        self._settings_service: Optional[SettingsService] = None
 
     # ========================================
     # Common Function 1 & 2: Login (Control Panel / Web Browser)
@@ -120,44 +124,36 @@ class System:
                 'system_locked': True
             }
 
-        # LoginManager를 통한 인증
-        result = self.login_manager.login_with_details(username, password, interface)
+        auth_service = self._get_auth_service()
+        if not auth_service:
+            print("[System] Authentication service unavailable.")
+            return {
+                'success': False,
+                'message': 'Authentication service unavailable.'
+            }
 
-        if result['success']:
-            # 로그 기록
-            self.log_manager.log_event(
-                event_type="LOGIN_SUCCESS",
-                description=f"User logged in via {interface}",
-                user_id=username
-            )
+        result = auth_service.login(username, password, interface)
+
+        if result.get('success'):
             self.system_state = SystemState.ACTIVE
 
-            # SystemController에도 인증 정보 전달 (기존 코드 호환)
             if self.system_controller:
                 self.system_controller.authenticated_user = username
 
             print(f"[System] User '{username}' logged in successfully via {interface}.")
         else:
-            # 로그 기록
-            self.log_manager.log_event(
-                event_type="LOGIN_FAILED",
-                description=f"Failed login attempt via {interface}",
-                user_id=username
-            )
             print(f"[System] Login failed for user '{username}'.")
 
         return result
 
     def logout(self):
         """현재 사용자 로그아웃"""
-        if self.login_manager.is_user_authenticated():
-            user = self.login_manager.get_current_user().get_username()
-            self.login_manager.logout()
-            self.log_manager.log_event(
-                event_type="LOGOUT",
-                description="User logged out",
-                user_id=user
-            )
+        auth_service = self._get_auth_service()
+        if not auth_service:
+            return
+
+        user = auth_service.logout()
+        if user:
             self.system_state = SystemState.READY
             print(f"[System] User '{user}' logged out.")
 
@@ -176,35 +172,24 @@ class System:
         :param alarm_delay: 알람 지연 시간 (초)
         :return: 성공 여부
         """
-        if not self.login_manager.is_user_authenticated():
-            print("[System] Authentication required to configure settings.")
+        settings_service = self._get_settings_service()
+        if not settings_service:
+            print("[System] Settings service unavailable.")
             return False
 
-        settings = self.configuration_manager.get_system_setting()
+        result = settings_service.update_settings(
+            monitoring_phone=monitoring_phone,
+            homeowner_phone=homeowner_phone,
+            lock_time=lock_time,
+            alarm_delay=alarm_delay,
+        )
 
-        if monitoring_phone:
-            settings.set_monitoring_service_phone(monitoring_phone)
-        if homeowner_phone:
-            settings.set_homeowner_phone(homeowner_phone)
-        if lock_time is not None:
-            settings.set_system_lock_time(lock_time)
-        if alarm_delay is not None:
-            settings.set_alarm_delay_time(alarm_delay)
-
-        success = self.configuration_manager.update_system_settings(settings)
-
-        if success:
-            user = self.login_manager.get_current_user().get_username()
-            self.log_manager.log_event(
-                event_type="CONFIG_UPDATE",
-                description="System settings updated",
-                user_id=user
-            )
+        if result.success:
             print("[System] System settings configured successfully.")
         else:
-            print("[System] Failed to configure system settings.")
+            print(f"[System] Failed to configure system settings: {result.message}")
 
-        return success
+        return result.success
 
     # ========================================
     # Common Function 4: Turn the system on
@@ -295,8 +280,9 @@ class System:
 
             # 7. 기본 관리자 계정 생성 (없으면)
             self._initialize_default_user()
+            self._refresh_services()
 
-            # ??? ?? ??
+            # 시스템 시작 로그
             self.log_manager.log_event(
                 event_type="SYSTEM_START",
                 description="SafeHome system started successfully"
@@ -466,6 +452,28 @@ class System:
         from ui.main_window import TkSecurityListener
         self.security_listener = TkSecurityListener(self.ui_app)
         self.security_system.set_event_listener(self.security_listener)
+
+    def _get_auth_service(self) -> Optional[AuthService]:
+        if not self._auth_service and self.login_manager and self.log_manager:
+            self._auth_service = AuthService(self.login_manager, self.log_manager)
+        return self._auth_service
+
+    def _get_settings_service(self) -> Optional[SettingsService]:
+        if (not self._settings_service and self.configuration_manager
+                and self.login_manager and self.log_manager):
+            self._settings_service = SettingsService(
+                self.configuration_manager,
+                self.login_manager,
+                self.log_manager,
+            )
+        return self._settings_service
+
+    def _refresh_services(self):
+        """Recreate service layer instances after dependency changes."""
+        self._auth_service = None
+        self._settings_service = None
+        self._get_auth_service()
+        self._get_settings_service()
 
     def _initialize_default_user(self):
         """기본 관리자 계정 생성"""
