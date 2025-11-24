@@ -184,8 +184,8 @@ class TestSurveillanceIntegration:
         
         camera = controller.get_camera(1)
         assert isinstance(camera, Camera)
-        assert not isinstance(camera, SafeHomeCamera)
-        
+        assert isinstance(camera, SafeHomeCamera)
+
         # SafeHomeCamera는 독립적으로 사용 가능
         safehome_cam = SafeHomeCamera(camera_id=99, location=[500, 600])
         assert safehome_cam.get_id() == 99
@@ -194,4 +194,3 @@ class TestSurveillanceIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

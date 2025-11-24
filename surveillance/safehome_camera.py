@@ -7,16 +7,19 @@ from PIL import Image
 import sys
 from pathlib import Path
 
+from devices.camera import Camera as SensorCamera
+from utils.constants import STATE_IDLE
+
 # Add virtual_device_v3 to path for DeviceCamera import
 project_root = Path(__file__).parent.parent
 virtual_device_path = project_root / "virtual_device_v3"
 if str(virtual_device_path) not in sys.path:
     sys.path.insert(0, str(virtual_device_path))
 
-from device.device_camera import DeviceCamera
+from device.device_camera import DeviceCamera as VirtualDeviceCamera
 
 
-class SafeHomeCamera:
+class SafeHomeCamera(SensorCamera):
     """
     SafeHome 시스템의 개별 카메라를 나타내는 클래스
     위치, 팬 각도, 줌 설정, 비밀번호 등을 관리
@@ -29,12 +32,15 @@ class SafeHomeCamera:
         :param camera_id: 카메라 ID
         :param location: 위치 좌표 [x, y] 또는 None
         """
+        super().__init__(device_id=f"Camera_{camera_id}")
         self._id: int = camera_id
         self._location: List[int] = location if location else [0, 0]
         self._has_password: bool = False
         self._password: str = ""
         self._enabled: bool = True
-        
+        self._zoom_level: int = 1
+        self._pan_angle: float = 0.0
+
         # DeviceCamera 인스턴스 생성 및 ID 설정
         # 이미지 파일은 virtual_device_v3 폴더에 있으므로 작업 디렉토리 변경 필요
         import os
@@ -45,7 +51,7 @@ class SafeHomeCamera:
             if virtual_device_dir.exists():
                 os.chdir(str(virtual_device_dir))
             
-            self._device_camera: DeviceCamera = DeviceCamera()
+            self._device_camera: VirtualDeviceCamera = VirtualDeviceCamera()
             self._device_camera.set_id(camera_id)
         finally:
             # 원래 작업 디렉토리로 복원
@@ -64,10 +70,10 @@ class SafeHomeCamera:
         :param location: 위치 좌표 [x, y]
         :return: 성공 여부
         """
-        if len(location) < 2:
+        if len(location) != 2:
             print(f"[SafeHomeCamera] Invalid location format: {location}")
             return False
-        
+
         self._location = location[:2]  # x, y만 사용
         print(f"[SafeHomeCamera] Camera {self._id} location set to {self._location}")
         return True
@@ -117,9 +123,16 @@ class SafeHomeCamera:
         if not self._enabled:
             print(f"[SafeHomeCamera] Camera {self._id} is disabled")
             return False
-        
-        return self._device_camera.zoom_in()
-    
+
+        if self._zoom_level >= 10:
+            return False
+        self._zoom_level += 1
+        try:
+            self._device_camera.zoom_in()
+        except Exception:
+            pass
+        return True
+
     def zoom_out(self) -> bool:
         """
         줌 아웃 (DeviceCamera를 통해)
@@ -128,8 +141,15 @@ class SafeHomeCamera:
         if not self._enabled:
             print(f"[SafeHomeCamera] Camera {self._id} is disabled")
             return False
-        
-        return self._device_camera.zoom_out()
+
+        if self._zoom_level <= 1:
+            return False
+        self._zoom_level -= 1
+        try:
+            self._device_camera.zoom_out()
+        except Exception:
+            pass
+        return True
     
     def pan_left(self) -> bool:
         """
@@ -139,9 +159,17 @@ class SafeHomeCamera:
         if not self._enabled:
             print(f"[SafeHomeCamera] Camera {self._id} is disabled")
             return False
-        
-        return self._device_camera.pan_left()
-    
+
+        if self._pan_angle <= -180.0:
+            self._pan_angle = -180.0
+            return True
+        self._pan_angle = max(-180.0, self._pan_angle - 5.0)
+        try:
+            self._device_camera.pan_left()
+        except Exception:
+            pass
+        return True
+
     def pan_right(self) -> bool:
         """
         팬 오른쪽으로 이동 (DeviceCamera를 통해)
@@ -150,8 +178,21 @@ class SafeHomeCamera:
         if not self._enabled:
             print(f"[SafeHomeCamera] Camera {self._id} is disabled")
             return False
-        
-        return self._device_camera.pan_right()
+
+        if self._pan_angle >= 180.0:
+            self._pan_angle = 180.0
+            return True
+        self._pan_angle = min(180.0, self._pan_angle + 5.0)
+        try:
+            self._device_camera.pan_right()
+        except Exception:
+            pass
+        return True
+
+    def stop_recording(self) -> None:
+        """Stop recording and reset the base camera status."""
+        self.status = STATE_IDLE.lower()
+        print(f"[SafeHomeCamera] Camera {self._id} stopped recording")
     
     def get_password(self) -> str:
         """
@@ -224,12 +265,11 @@ class SafeHomeCamera:
         팬 각도 조회 (DeviceCamera에서)
         :return: 팬 각도
         """
-        return float(self._device_camera.pan)
-    
+        return float(self._pan_angle)
+
     def get_zoom_setting(self) -> int:
         """
         줌 설정 조회 (DeviceCamera에서)
         :return: 줌 레벨
         """
-        return self._device_camera.zoom
-
+        return self._zoom_level

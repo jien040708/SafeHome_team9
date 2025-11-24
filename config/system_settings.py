@@ -110,7 +110,7 @@ class SystemSettings:
         result = self.storage.execute_query(check_sql)
 
         if result and len(result) > 0:
-            # UPDATE
+            # UPDATE 최근 설정
             sql = """
                 UPDATE system_settings
                 SET monitoring_service_phone = ?,
@@ -118,7 +118,11 @@ class SystemSettings:
                     system_lock_time = ?,
                     alarm_delay_time = ?,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE setting_id = (SELECT setting_id FROM system_settings LIMIT 1)
+                WHERE setting_id = (
+                    SELECT setting_id FROM system_settings
+                    ORDER BY setting_id DESC
+                    LIMIT 1
+                )
             """
         else:
             # INSERT

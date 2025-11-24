@@ -1,8 +1,8 @@
 import threading
 import time
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 import tkinter as tk
-from tkinter import messagebox
 from .interface_camera import InterfaceCamera
 
 
@@ -14,6 +14,7 @@ class DeviceCamera(threading.Thread, InterfaceCamera):
     def __init__(self):
         super().__init__(daemon=True)
         
+        self.assets_root = Path(__file__).resolve().parent.parent
         self.cameraId = 0
         self.time = 0
         self.pan = 0
@@ -32,19 +33,22 @@ class DeviceCamera(threading.Thread, InterfaceCamera):
         """Set the camera ID and load associated image (synchronized)."""
         with self._lock:
             self.cameraId = id_
-            fileName = f"camera{id_}.jpg"
-            
-            try:
-                self.imgSource = Image.open(fileName)
+            file_path = self.assets_root / f"camera{id_}.jpg"
+
+            if file_path.exists():
+                try:
+                    self.imgSource = Image.open(file_path)
+                except Exception:
+                    self.imgSource = None
+                    print(f"ERROR: failed to open {file_path}")
+            else:
+                # Tests request more cameras than there are static JPGs; fall back to a blank image
+                self.imgSource = Image.new("RGB", (self.SOURCE_SIZE, self.SOURCE_SIZE), "black")
+                print(f"[DeviceCamera] Missing {file_path.name}, using placeholder image.")
+
+            if self.imgSource:
                 self.centerWidth = self.imgSource.width // 2
                 self.centerHeight = self.imgSource.height // 2
-            except FileNotFoundError:
-                self.imgSource = None
-                try:
-                    messagebox.showerror("File Error", f"{fileName} file open error")
-                except:
-                    print(f"ERROR: {fileName} file open error")
-                return
     
     def get_id(self):
         """Get the camera ID."""

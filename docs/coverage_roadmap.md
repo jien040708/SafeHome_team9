@@ -8,8 +8,8 @@
 
 ## Baseline (2025-11-24 run)
 - Command: `pytest --cov=. --cov-report=term --cov-report=json:coverage.json --cov-report=html`
-- Result: 107 tests passed, 60% overall coverage (`docs/test_coverage_report.md:3-78`).
-- Gap concentration: `main.py`, `ui/main_window.py`, `domain/system*.py`, `devices/*`, `event_logging/log_manager.py`, and `virtual_device_v3/device/safehome_sensor_test.py`.
+- Result: 239 tests passed, 70% overall coverage (`docs/test_coverage.md:3-82`).
+- Gap concentration: `main.py`, `ui/main_window.py`, `domain/system_controller.py`, `domain/system_states.py`, `event_logging/log_manager.py`, and `virtual_device_v3/device/safehome_sensor_test.py`.
 
 ## Coverage Roadmap
 | Phase | Coverage target | Requirement alignment | Refactoring & test focus | Owner cues |

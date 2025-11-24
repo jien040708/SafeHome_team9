@@ -3,9 +3,9 @@ import tkinter as tk
 import os
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 
-from SafeHome_team9.devices.camera import Camera
-from SafeHome_team9.devices.motion_detector import MotionDetector
-from SafeHome_team9.devices.windoor_sensor import WindowDoorSensor
+from devices.camera import Camera
+from devices.motion_detector import MotionDetector
+from devices.windoor_sensor import WindowDoorSensor
 from domain.system import System
 from ui.main_window import SafeHomeApp
 from devices.device_factory import create_default_device_factory, DeviceFactoryError
@@ -1194,13 +1194,9 @@ def open_camera_view_window(camera_id):
 def run_web():
     app.run(port=5000, debug=False, use_reloader=False)
 
-def initialize_devices_after_turn_on(safehome_system, sensors):
-    """
-    시스템 turn_on() 성공 후 호출되어 디바이스를 초기화합니다.
-    """
-    # Sensors를 시스템에 연결
+
 def _load_system_sensors(system: System):
-    """Instantiate sensor objects from the persisted catalog."""
+    """Instantiate sensor objects from the persisted catalog (with fallback defaults)."""
     factory = create_default_device_factory()
     config = getattr(system, "configuration_manager", None)
     device_records = []
@@ -1221,7 +1217,10 @@ def _load_system_sensors(system: System):
     if sensors:
         return sensors
 
-    print("[Main] No registered devices available; using fallback defaults.")
+    fallback_reason = (
+        "System configuration unavailable" if not config else "No registered devices available"
+    )
+    print(f"[Main] {fallback_reason}; using fallback defaults.")
     fallback_records = [
         ("Front Door", SENSOR_WIN_DOOR),
         ("Living Room", SENSOR_MOTION),
@@ -1236,37 +1235,26 @@ def _load_system_sensors(system: System):
 
     return sensors
 
-def main():
-    global safehome_system
-    root = tk.Tk()
 
-    # System Init (Common Function 4: Turn the system on)
-    safehome_system = System()
-    if not safehome_system.turn_on():
-        print("Failed to start SafeHome system. Exiting...")
-        return
+def initialize_devices_after_turn_on(system: System, ui_sensors):
+    """Refresh device objects once the system is fully initialized."""
+    loaded_sensors = _load_system_sensors(system)
+    if loaded_sensors:
+        ui_sensors.clear()
+        ui_sensors.extend(loaded_sensors)
+    system.sensors = ui_sensors
 
-    # Devices Init
-    sensors = _load_system_sensors(safehome_system)
-    safehome_system.sensors = sensors
-
-    # Connect Devices to SystemController
-    if safehome_system.system_controller:
-        for s in sensors:
-            s.add_observer(safehome_system.system_controller)
-            if s.get_type() == SENSOR_CAMERA and hasattr(s, "take_picture"):
-                safehome_system.system_controller.add_camera(s)
+    if system.system_controller:
+        for sensor in ui_sensors:
+            sensor.add_observer(system.system_controller)
+            if sensor.get_type() == SENSOR_CAMERA and hasattr(sensor, "take_picture"):
+                system.system_controller.add_camera(sensor)
         print("[Main] Connected sensors to SystemController")
 
-    # Initialize cameras in CameraController (3 cameras)
-    # Positions based on black dots in floorplan.png (607x373)
-    if safehome_system.camera_controller:
-        # Camera 1 at position (350, 20) - top center
-        safehome_system.camera_controller.add_camera(350, 20)
-        # Camera 2 at position (330, 208) - middle center
-        safehome_system.camera_controller.add_camera(330, 208)
-        # Camera 3 at position (332, 262) - bottom center
-        safehome_system.camera_controller.add_camera(332, 262)
+    if system.camera_controller:
+        system.camera_controller.add_camera(350, 20)
+        system.camera_controller.add_camera(330, 208)
+        system.camera_controller.add_camera(332, 262)
         print("[Main] Initialized 3 cameras in CameraController at floorplan black dot positions")
 
 
@@ -1274,25 +1262,21 @@ def main():
     global safehome_system
     root = tk.Tk()
 
-    # System 객체 생성 (아직 turn_on 하지 않음)
-    # Common Function 4: Turn the system on은 UI에서 사용자가 버튼을 누를 때 실행됨
     safehome_system = System()
 
-    # Devices 준비 (아직 연결하지 않음 - turn_on 후에 연결됨)
-    sensors = [
+    ui_sensors = [
         WindowDoorSensor("Front Door"),
         MotionDetector("Living Room"),
-        Camera("Garden Cam")
+        Camera("Garden Cam"),
     ]
 
-    # UI Init (시스템이 꺼진 상태에서 시작)
-    ui_app = SafeHomeApp(root, safehome_system, sensors)
+    ui_app = SafeHomeApp(root, safehome_system, ui_sensors)
 
-    # 시스템에 UI 참조 및 디바이스 초기화 콜백 설정
     safehome_system.set_ui(ui_app)
-    safehome_system.on_turn_on_complete = lambda: initialize_devices_after_turn_on(safehome_system, sensors)
+    safehome_system.on_turn_on_complete = lambda: initialize_devices_after_turn_on(
+        safehome_system, ui_sensors
+    )
 
-    # Web Server Start
     t = threading.Thread(target=run_web, daemon=True)
     t.start()
 
@@ -1305,10 +1289,11 @@ def main():
     try:
         root.mainloop()
     finally:
-        # System Shutdown (Common Function 5: Turn the system off)
         if safehome_system.system_state.value != "Off":
             print("\nShutting down SafeHome system...")
             safehome_system.turn_off()
+
+
 
 if __name__ == "__main__":
     main()

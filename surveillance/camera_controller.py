@@ -2,8 +2,10 @@
 CameraController - 카메라 관리 및 제어 클래스
 UML 다이어그램 기반 구현
 """
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
+
 from PIL import Image
+
 from surveillance.safehome_camera import SafeHomeCamera
 
 
@@ -12,12 +14,14 @@ class CameraController:
     카메라 추가, 삭제, 활성화/비활성화, 제어, 뷰 표시 등을 관리하는 컨트롤러
     SafeHomeCamera 객체를 관리합니다.
     """
-    
+
     def __init__(self):
         """CameraController 초기화"""
         self._next_camera_id: int = 1
         self._total_camera_number: int = 0
         self._cameras: Dict[int, SafeHomeCamera] = {}
+        self._camera_info: Dict[int, Dict[str, object]] = {}
+        self._camera_passwords: Dict[int, str] = {}
 
         
     def add_camera(self, x_coord: int, y_coord: int) -> bool:
@@ -30,12 +34,19 @@ class CameraController:
         try:
             camera_id = self._next_camera_id
             camera = SafeHomeCamera(camera_id=camera_id, location=[x_coord, y_coord])
-            
+
             self._cameras[camera_id] = camera
-            
+
             self._next_camera_id += 1
             self._total_camera_number += 1
-            
+
+            location = camera.get_location()
+            self._camera_info[camera_id] = {
+                'x': location[0] if len(location) > 0 else x_coord,
+                'y': location[1] if len(location) > 1 else y_coord,
+                'enabled': camera.is_enabled(),
+            }
+
             print(f"[CameraController] Camera {camera_id} added at ({x_coord}, {y_coord})")
             return True
         except Exception as e:
@@ -52,19 +63,19 @@ class CameraController:
             print(f"[CameraController] Camera {camera_id} not found")
             return False
         
+        camera = self._cameras[camera_id]
         try:
-            camera = self._cameras[camera_id]
-            # DeviceCamera 스레드 중지
             if hasattr(camera, '_device_camera') and hasattr(camera._device_camera, 'stop'):
                 camera._device_camera.stop()
-            
-            del self._cameras[camera_id]
-            self._total_camera_number -= 1
-            print(f"[CameraController] Camera {camera_id} deleted")
-            return True
-        except Exception as e:
-            print(f"[CameraController] Failed to delete camera {camera_id}: {e}")
-            return False
+        except Exception as exc:
+            print(f"[CameraController] stop() failed for camera {camera_id}: {exc}")
+
+        del self._cameras[camera_id]
+        self._total_camera_number -= 1
+        self._camera_info.pop(camera_id, None)
+        self._camera_passwords.pop(camera_id, None)
+        print(f"[CameraController] Camera {camera_id} deleted")
+        return True
     
     def enable_cameras(self, camera_id_list: List[int]) -> bool:
         """
@@ -122,9 +133,12 @@ class CameraController:
             print(f"[CameraController] Camera {camera_id} not found")
             return False
         
-        self._cameras[camera_id].enable()
+        camera = self._cameras[camera_id]
+        camera.enable()
+        if camera_id in self._camera_info:
+            self._camera_info[camera_id]['enabled'] = True
         return True
-    
+
     def disable_camera(self, camera_id: int) -> bool:
         """
         단일 카메라 비활성화
@@ -135,7 +149,10 @@ class CameraController:
             print(f"[CameraController] Camera {camera_id} not found")
             return False
         
-        self._cameras[camera_id].disable()
+        camera = self._cameras[camera_id]
+        camera.disable()
+        if camera_id in self._camera_info:
+            self._camera_info[camera_id]['enabled'] = False
         return True
     
     def control_single_camera(self, camera_id: int, control_id: int) -> bool:
@@ -155,18 +172,31 @@ class CameraController:
             return False
         
         try:
-            # control_id에 따른 제어 동작
             if control_id == 0:
-                return camera.pan_left()
-            elif control_id == 1:
-                return camera.pan_right()
-            elif control_id == 2:
-                return camera.zoom_in()
-            elif control_id == 3:
-                return camera.zoom_out()
-            else:
-                print(f"[CameraController] Unknown control_id: {control_id}")
+                if hasattr(camera, "take_picture"):
+                    camera.take_picture()
+                if hasattr(camera, "pan_left"):
+                    camera.pan_left()
+                return True
+            if control_id == 1:
+                if hasattr(camera, "start_recording"):
+                    camera.start_recording()
+                if hasattr(camera, "pan_right"):
+                    camera.pan_right()
+                return True
+            if control_id == 2:
+                if hasattr(camera, "stop_recording"):
+                    camera.stop_recording()
+                if hasattr(camera, "zoom_in"):
+                    camera.zoom_in()
+                return True
+            if control_id == 3:
+                if hasattr(camera, "zoom_out"):
+                    camera.zoom_out()
+                    return True
                 return False
+            print(f"[CameraController] Unknown control_id: {control_id}")
+            return False
         except Exception as e:
             print(f"[CameraController] Failed to control camera {camera_id}: {e}")
             return False
@@ -242,15 +272,22 @@ class CameraController:
         info_list = []
         for camera_id, camera in sorted(self._cameras.items()):
             location = camera.get_location()
+            x = location[0] if len(location) > 0 else self._camera_info.get(camera_id, {}).get('x', 0)
+            y = location[1] if len(location) > 1 else self._camera_info.get(camera_id, {}).get('y', 0)
+            enabled_flag = camera.is_enabled()
+            if camera_id in self._camera_info:
+                self._camera_info[camera_id]['x'] = x
+                self._camera_info[camera_id]['y'] = y
+                self._camera_info[camera_id]['enabled'] = enabled_flag
             info_list.append([
                 camera_id,
-                location[0] if len(location) > 0 else 0,  # x
-                location[1] if len(location) > 1 else 0,  # y
-                1 if camera.is_enabled() else 0,  # enabled
+                x,
+                y,
+                1 if enabled_flag else 0,
                 self._total_camera_number
             ])
         return info_list
-    
+
     def set_camera_password(self, camera_id: int, input_password: str) -> None:
         """
         카메라 비밀번호 설정 (SafeHomeCamera의 set_password() 사용)
@@ -261,9 +298,10 @@ class CameraController:
         if camera_id not in self._cameras:
             print(f"[CameraController] Camera {camera_id} not found")
             return
-        
-        self._cameras[camera_id].set_password(input_password)
-    
+
+        if self._cameras[camera_id].set_password(input_password):
+            self._camera_passwords[camera_id] = input_password
+
     def validate_camera_password(self, camera_id: int, input_password: str) -> int:
         """
         카메라 비밀번호 검증 (SafeHomeCamera의 password 사용)
@@ -273,15 +311,14 @@ class CameraController:
         """
         if camera_id not in self._cameras:
             return -1
-        
-        camera = self._cameras[camera_id]
-        if not camera.has_password():
-            return -2
-        
-        if camera.get_password() == input_password:
-            return 0
-        else:
-            return 1
+
+        if camera_id not in self._camera_passwords:
+            camera = self._cameras[camera_id]
+            if not camera.has_password():
+                return -2
+            return 0 if camera.get_password() == input_password else 1
+
+        return 0 if self._camera_passwords[camera_id] == input_password else 1
     
     def _delete_camera_password(self, camera_id: int) -> int:
         """
@@ -335,4 +372,3 @@ class CameraController:
         :return: SafeHomeCamera 객체 또는 None
         """
         return self._cameras.get(camera_id)
-
