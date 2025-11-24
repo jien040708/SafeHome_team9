@@ -13,7 +13,8 @@ class DeviceCamera(threading.Thread, InterfaceCamera):
     
     def __init__(self):
         super().__init__(daemon=True)
-        
+
+        # Camera assets sit under virtual_device_v3/.
         self.assets_root = Path(__file__).resolve().parent.parent
         self.cameraId = 0
         self.time = 0
@@ -34,21 +35,24 @@ class DeviceCamera(threading.Thread, InterfaceCamera):
         with self._lock:
             self.cameraId = id_
             file_path = self.assets_root / f"camera{id_}.jpg"
+            self.imgSource = None
 
             if file_path.exists():
                 try:
                     self.imgSource = Image.open(file_path)
-                except Exception:
-                    self.imgSource = None
-                    print(f"ERROR: failed to open {file_path}")
-            else:
-                # Tests request more cameras than there are static JPGs; fall back to a blank image
+                except Exception as exc:
+                    print(f"[DeviceCamera] Failed to open {file_path.name}: {exc}")
+
+            if self.imgSource is None:
+                # Coverage tests ask for camera IDs without still images.
+                # Produce a placeholder so downstream logic can continue.
                 self.imgSource = Image.new("RGB", (self.SOURCE_SIZE, self.SOURCE_SIZE), "black")
+                draw = ImageDraw.Draw(self.imgSource)
+                draw.text((10, self.SOURCE_SIZE // 2 - 10), f"CAM {id_}", fill="white")
                 print(f"[DeviceCamera] Missing {file_path.name}, using placeholder image.")
 
-            if self.imgSource:
-                self.centerWidth = self.imgSource.width // 2
-                self.centerHeight = self.imgSource.height // 2
+            self.centerWidth = self.imgSource.width // 2
+            self.centerHeight = self.imgSource.height // 2
     
     def get_id(self):
         """Get the camera ID."""

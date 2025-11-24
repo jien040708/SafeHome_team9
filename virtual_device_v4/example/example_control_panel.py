@@ -102,6 +102,8 @@ class TestControlPanel(DeviceControlPanelAbstract):
         print("Button 0 pressed")
         self.button_sequence += "0"
         self.set_display_short_message2(f"Code: {self.button_sequence}")
+        self.set_display_not_ready(True)
+        self.set_security_zone_number(4)
     
     def button_sharp(self):
         print("Button # pressed (Reset/Panic)")

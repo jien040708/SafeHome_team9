@@ -28,44 +28,48 @@ class DeviceControlPanelAbstract(tk.Toplevel, ABC):
         y_h1 = 90
         y_h2 = 70
         
-        # Security Zone label
-        # 눈에 더 잘보이도록 테두리 추가
-        display_dummy = tk.Entry(self, justify='center', state='readonly',
-                     bg='white', fg='black', font=('Arial', 10, 'bold'),
-                     bd=2, relief='ridge')
-        display_dummy.insert(0, "Security Zone")
-        display_dummy.place(x=x_start, y=y_start, width=x_w1, height=y_h1)
-        
-        # Zone number display (larger font, more prominent)
-        self.display_number = tk.Entry(self, justify='center', state='readonly',
-                                       bg='yellow', fg='black', font=('Arial', 24, 'bold'))
-        self.display_number.insert(0, "1")
-        self.display_number.place(x=x_start + x_w1, y=y_start, width=x_w2, height=y_h1)
+        # Security Zone panel
+        # Use a single framed container but remove its visible border so
+        # the top area appears visually unified (no seams).
+        zone_frame = tk.Frame(self, bd=0, relief='flat', bg='white')
+        zone_frame.place(x=x_start, y=y_start, width=(x_w1 + x_w2), height=y_h1)
+
+        display_dummy = tk.Label(zone_frame, text="Security Zone", justify='center',
+                     bg='white', fg='black', font=('Arial', 10, 'bold'), bd=0, relief='flat')
+        display_dummy.place(x=0, y=0, width=x_w1, height=y_h1)
+
+        # Zone number display (larger font) inside the same frame
+        self.display_number = tk.Label(zone_frame, text="1", justify='center',
+                           bg='white', fg='black', font=('Arial', 24, 'bold'), bd=0, relief='flat')
+        self.display_number.place(x=x_w1, y=0, width=x_w2, height=y_h1)
         
         # Status displays frame
         status_frame = tk.Frame(self, bg='white')
         status_frame.place(x=x_start + x_w1 + x_w2, y=y_start, width=x_w3, height=y_h1)
         
-        self.display_away = tk.Entry(status_frame, justify='center', state='readonly',
-                                     bg='white', fg='light gray')
-        self.display_away.insert(0, "away")
+        self.display_away = tk.Label(status_frame, justify='center', bg='white', fg='light gray')
+        self.display_away.config(text="away")
         self.display_away.pack(fill='both', expand=True)
         
-        self.display_stay = tk.Entry(status_frame, justify='center', state='readonly',
-                                     bg='white', fg='light gray')
-        self.display_stay.insert(0, "stay")
+        self.display_stay = tk.Label(status_frame, justify='center', bg='white', fg='light gray')
+        self.display_stay.config(text="stay")
         self.display_stay.pack(fill='both', expand=True)
         
-        self.display_not_ready = tk.Entry(status_frame, justify='center', state='readonly',
-                                          bg='white', fg='light gray')
-        self.display_not_ready.insert(0, "not ready")
+        self.display_not_ready = tk.Label(status_frame, justify='center', bg='white', fg='light gray')
+        self.display_not_ready.config(text="not ready")
         self.display_not_ready.pack(fill='both', expand=True)
-        
-        # Text display area
-        self.display_text = Text(self, height=4, width=27, bg='white', fg='black',
-                state='disabled', wrap='word', bd=2, relief='sunken')
-        self.display_text.place(x=x_start, y=y_start,
-                   width=x_w1 + x_w2 + x_w3 + 60, height=y_h1 + y_h2)
+
+        # Text display area (smaller and placed below top row so it doesn't cover widgets)
+        # Make the text display visually match the top area: remove border and highlight
+        self.display_text = Text(self, height=3, width=27, bg='white', fg='black',
+            font=('Courier', 10), state='disabled', wrap='word', bd=0, relief='flat', highlightthickness=0)
+        # Make the text box a bit narrower and shorter so top panels remain visible
+        text_width = x_w1 + x_w2 + x_w3 
+        text_height = max(40, y_h2 - 10)
+        self.display_text.place(x=x_start , y=y_start + y_h1 ,
+                width=text_width, height=text_height)
+        # Ensure the text area is behind the top-row widgets so they remain visible
+        self.display_text.lower()
         self._update_display_text()
         
         # Button panel with grid layout
@@ -172,10 +176,8 @@ class DeviceControlPanelAbstract(tk.Toplevel, ABC):
 
     def set_security_zone_number(self, num):
         """Set the security zone number display."""
-        self.display_number.config(state='normal')
-        self.display_number.delete(0, tk.END)
-        self.display_number.insert(0, str(num))
-        self.display_number.config(state='readonly')
+        # `display_number` is a Label now; set its text directly.
+        self.display_number.config(text=str(num))
     
     def set_display_away(self, on):
         """Set the 'away' display state."""

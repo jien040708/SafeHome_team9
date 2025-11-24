@@ -8,6 +8,12 @@ import os
 from pathlib import Path
 from utils.constants import *
 from security.interfaces import SecurityEventListener
+from domain.services import (
+    ControlPanelLoginPresenter,
+    ControlPanelResetPresenter,
+    ZonesViewModel,
+    ModesViewModel,
+)
 
 # 페이지 이름 상수
 PAGES = ("PowerOff", "Login", "MainMenu", "Zones", "Modes", "Monitoring")
@@ -318,6 +324,7 @@ class LoginView(ttk.Frame):
         self.system = system
         self.app = app
         self.is_locked = False
+        self.presenter = ControlPanelLoginPresenter(system)
 
         ttk.Label(self, text="SafeHome", style="Title.TLabel").pack(pady=(40, 30))
 
@@ -351,75 +358,31 @@ class LoginView(ttk.Frame):
         uid = self.user_entry.get()
         pw = self.pass_entry.get()
 
-        if not uid or not pw:
-            messagebox.showwarning("Input Required", "Please enter both User ID and Password")
-            return
+        outcome = self.presenter.attempt_login(uid, pw)
+        self._update_status(outcome.status_text, outcome.status_color)
 
-        # Common Function 1: Log onto the system through control panel
-        result = self.system.login_with_details(uid, pw, interface='control_panel')
+        if outcome.alert_message:
+            if outcome.alert_level == "warning":
+                messagebox.showwarning(outcome.alert_title or "Warning", outcome.alert_message)
+            else:
+                messagebox.showerror(outcome.alert_title or "Error", outcome.alert_message)
 
-        if result['success']:
-            # Login successful - unlock UI if it was locked
+        if outcome.success:
             if self.is_locked:
                 self.unlock_control_panel()
-
-            self.status_label.config(text="", foreground="blue")
-            self.app.show_page("MainMenu")
+            if outcome.navigate_to:
+                self.app.show_page(outcome.navigate_to)
+        self.pass_entry.delete(0, tk.END)
+        if outcome.success:
+            self.user_entry.delete(0, tk.END)
         else:
-            # Login failed
-            if result.get('locked'):
-                # Account locked - show remaining time
-                remaining_time = result.get('remaining_time', 0)
-
-                if remaining_time > 0:
-                    # 시간 기반 잠금 - 남은 시간 표시
-                    minutes = remaining_time // 60
-                    seconds = remaining_time % 60
-                    time_msg = f"{minutes} minutes {seconds} seconds" if minutes > 0 else f"{seconds} seconds"
-
-                    self.status_label.config(
-                        text=f"Account locked. Try again in {time_msg}",
-                        foreground="red"
-                    )
-                    messagebox.showerror("Account Locked",
-                                       f"{result.get('message', 'Account is locked.')}\n\n"
-                                       f"Please try again in {time_msg}.")
-                else:
-                    # 잠금 직후 또는 시간 정보 없음 - 메시지만 표시 (UI는 잠그지 않음)
-                    self.status_label.config(
-                        text=f"Account locked. Please wait and try again.",
-                        foreground="red"
-                    )
-                    messagebox.showerror("Account Locked",
-                                       f"{result.get('message', 'Account is locked.')}\n\n"
-                                       "Please wait a moment and try again.")
-            elif result.get('system_locked'):
-                # System locked
-                messagebox.showerror("System Locked", result.get('message', 'System is locked.'))
-            elif result.get('system_off'):
-                # System off
-                messagebox.showerror("System Off", result.get('message', 'System is off.'))
-            else:
-                # Incorrect password - show remaining attempts
-                tries = result.get('tries', 0)
-                remaining = result.get('remaining', 0)
-
-                if remaining > 0:
-                    self.status_label.config(
-                        text=f"Login failed. Remaining attempts: {remaining}",
-                        foreground="red"
-                    )
-                    messagebox.showerror("Login Failed",
-                                       f"Incorrect password.\n\n"
-                                       f"Failed attempts: {tries}\n"
-                                       f"Remaining attempts: {remaining}")
-                else:
-                    self.status_label.config(text="", foreground="blue")
-                    messagebox.showerror("Login Failed", result.get('message', 'Login failed'))
-
-            # Clear password field
-            self.pass_entry.delete(0, tk.END)
             self.pass_entry.focus()
+
+    def _update_status(self, text: str, color: str):
+        if text:
+            self.status_label.config(text=text, foreground=color)
+        else:
+            self.status_label.config(text="", foreground="blue")
 
     def lock_control_panel(self):
         """Lock the control panel UI"""
@@ -510,6 +473,7 @@ class ZonesView(ttk.Frame):
         self.system = system
         self.app = app
         self.sensors = sensors
+        self.zones_vm = ZonesViewModel(system)
         self.sensor_status_labels: dict[str, ttk.Label] = {}
         self.sensor_zone_labels: dict[str, ttk.Label] = {}
         self.zone_name_var = tk.StringVar()
@@ -593,7 +557,7 @@ class ZonesView(ttk.Frame):
     @property
     def config_manager(self):
         """동적으로 configuration_manager 가져오기"""
-        return self.system.configuration_manager
+        return self.zones_vm.config_manager
 
     @property
     def controller(self):
@@ -609,19 +573,17 @@ class ZonesView(ttk.Frame):
     def refresh_zone_list(self):
         if not self.config_manager:
             return
-        zones = self.config_manager.refresh_safety_zones()
+        zones = self.zones_vm.get_zones()
         self.zone_list.delete(0, tk.END)
         zone_display = []
         for zone in zones:
-            display = f"[{zone.zone_id}] {zone.zone_name}"
-            self.zone_list.insert(tk.END, display)
+            self.zone_list.insert(tk.END, zone.label)
             zone_display.append(f"{zone.zone_id} - {zone.zone_name}")
         self.zone_combo['values'] = zone_display
         if zone_display and not self.zone_assign_var.get():
             self.zone_combo.current(0)
 
-        devices = self.config_manager.device_manager.load_all_devices()
-        sensor_ids = [device_id for device_id, _ in devices]
+        sensor_ids = self.zones_vm.get_sensor_ids()
         if sensor_ids and not self.sensor_var.get():
             self.sensor_combo['values'] = sensor_ids
             self.sensor_combo.current(0)
@@ -631,15 +593,13 @@ class ZonesView(ttk.Frame):
     def refresh_sensor_assignments(self):
         if not self.config_manager:
             return
-        assignments = self.config_manager.list_sensor_assignments()
-        zone_map = self.config_manager.get_zone_name_map()
+        assignments = self.zones_vm.get_sensor_zone_map()
 
         for sensor_id, label in self.sensor_zone_labels.items():
-            zone_id = assignments.get(sensor_id)
-            if zone_id is None:
+            zone_name = assignments.get(sensor_id)
+            if zone_name is None:
                 label.config(text="Zone: -", foreground="gray40")
             else:
-                zone_name = zone_map.get(str(zone_id), str(zone_id))
                 label.config(text=f"Zone: {zone_name}", foreground="steelblue")
 
     def _selected_zone_id(self) -> Optional[int]:
@@ -657,7 +617,7 @@ class ZonesView(ttk.Frame):
         if not name:
             messagebox.showerror("Input Required", "Enter a zone name.")
             return
-        if self.config_manager.add_safety_zone(name):
+        if self.zones_vm.add_zone(name):
             self.zone_name_var.set("")
             self.refresh_zone_list()
 
@@ -670,7 +630,7 @@ class ZonesView(ttk.Frame):
         if not name:
             messagebox.showerror("Input Required", "Enter a new zone name.")
             return
-        self.config_manager.modify_safety_zone(zone_id, zone_name=name)
+        self.zones_vm.rename_zone(zone_id, name)
         self.zone_name_var.set("")
         self.refresh_zone_list()
 
@@ -680,7 +640,7 @@ class ZonesView(ttk.Frame):
             messagebox.showerror("Select Zone", "Select a zone to delete.")
             return
         if messagebox.askyesno("Confirm", "Delete selected zone->"):
-            self.config_manager.delete_safety_zone(zone_id)
+            self.zones_vm.delete_zone(zone_id)
             self.refresh_zone_list()
             self.refresh_sensor_assignments()
 
@@ -695,7 +655,7 @@ class ZonesView(ttk.Frame):
         except Exception:
             messagebox.showerror("Invalid Zone", "Unable to parse the selected zone.")
             return
-        if self.config_manager.assign_sensor_to_zone(sensor_id, zone_id):
+        if self.zones_vm.assign_sensor(sensor_id, zone_id):
             self.assignment_feedback.config(text=f"{sensor_id} -> Zone {zone_id}", foreground="green")
             self.refresh_sensor_assignments()
         else:
@@ -706,7 +666,7 @@ class ZonesView(ttk.Frame):
         if not sensor_id:
             messagebox.showerror("Input Required", "Select a sensor to clear.")
             return
-        if self.config_manager.remove_sensor_assignment(sensor_id):
+        if self.zones_vm.clear_assignment(sensor_id):
             self.assignment_feedback.config(text=f"{sensor_id} unassigned", foreground="orange")
             self.refresh_sensor_assignments()
         else:
@@ -782,6 +742,7 @@ class ModesView(ttk.Frame):
         super().__init__(parent)
         self.system = system
         self.app = app
+        self.modes_vm = ModesViewModel(system)
 
         header = ttk.Frame(self)
         header.pack(fill="x", pady=10, padx=10)
@@ -832,10 +793,9 @@ class ModesView(ttk.Frame):
         return self.system.system_controller
 
     def change_mode(self, mode):
-        if not self.controller:
-            messagebox.showerror("Error", "System is not running.")
-            return
-        self.controller.set_security_mode(mode)
+        success, error = self.modes_vm.change_mode(mode)
+        if not success:
+            messagebox.showerror("Error", error or "Failed to set mode.")
 
     def update_mode_display(self, text, armed_zones=None):
         self.mode_display.config(text=f"Current: {text}")
@@ -847,12 +807,8 @@ class ModesView(ttk.Frame):
                 zone_text = "All Zones"
                 count = 0
             else:
-                if self.system.configuration_manager:
-                    zone_map = self.system.configuration_manager.get_zone_name_map()
-                    resolved = [zone_map.get(str(zone), str(zone)) for zone in sorted(armed_zones)]
-                    zone_text = ", ".join(resolved)
-                else:
-                    zone_text = ", ".join(str(z) for z in sorted(armed_zones))
+                resolved = self.modes_vm.resolve_zone_names(armed_zones)
+                zone_text = ", ".join(resolved)
                 count = len(armed_zones)
             self.zones_label.config(text=f"Armed Zones: {zone_text}")
             self._update_zone_indicator(count)
@@ -883,6 +839,7 @@ class MonitoringView(ttk.Frame):
         super().__init__(parent)
         self.system = system
         self.app = app
+        self.reset_presenter = ControlPanelResetPresenter(system)
 
         header = ttk.Frame(self)
         header.pack(fill="x", pady=10, padx=10)
@@ -1090,11 +1047,13 @@ Security Mode: {status_info['security_mode'] or 'N/A'}
 
     def reset_system(self):
         """Common Function 6: Reset the system"""
-        result = messagebox.askyesno("Confirm Reset", "Are you sure you want to reset the system->")
-        if result:
-            success = self.system.reset()
-            if success:
-                messagebox.showinfo("Success", "System reset successfully!")
-                self.update_system_status()
-            else:
-                messagebox.showerror("Error", "Failed to reset system.")
+        result = messagebox.askyesno("Confirm Reset", "Are you sure you want to reset the system?")
+        if not result:
+            return
+
+        outcome = self.reset_presenter.perform_reset()
+        if outcome.alert_level == "info":
+            messagebox.showinfo(outcome.alert_title, outcome.alert_message)
+            self.update_system_status()
+        else:
+            messagebox.showerror(outcome.alert_title, outcome.alert_message)

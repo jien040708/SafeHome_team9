@@ -8,8 +8,8 @@ from devices.motion_detector import MotionDetector
 from devices.windoor_sensor import WindowDoorSensor
 from domain.system import System
 from ui.main_window import SafeHomeApp
-from devices.device_factory import create_default_device_factory, DeviceFactoryError
 from utils.constants import *
+from domain.services.bootstrap_service import SystemBootstrapper
 
 app = Flask(__name__, static_folder='virtual_device_v3', static_url_path='/static')
 app.secret_key = os.urandom(24)  # 세션 암호화 키
@@ -1195,69 +1195,6 @@ def run_web():
     app.run(port=5000, debug=False, use_reloader=False)
 
 
-def _load_system_sensors(system: System):
-    """Instantiate sensor objects from the persisted catalog (with fallback defaults)."""
-    factory = create_default_device_factory()
-    config = getattr(system, "configuration_manager", None)
-    device_records = []
-
-    if config and getattr(config, "device_manager", None):
-        try:
-            device_records = config.device_manager.load_all_devices()
-        except Exception as exc:  # pragma: no cover - defensive
-            print(f"[Main] Failed to load devices from database: {exc}")
-
-    sensors = []
-    for device_id, device_type in device_records:
-        try:
-            sensors.append(factory.create(device_type, device_id))
-        except DeviceFactoryError as exc:
-            print(f"[Main] Skipping device '{device_id}': {exc}")
-
-    if sensors:
-        return sensors
-
-    fallback_reason = (
-        "System configuration unavailable" if not config else "No registered devices available"
-    )
-    print(f"[Main] {fallback_reason}; using fallback defaults.")
-    fallback_records = [
-        ("Front Door", SENSOR_WIN_DOOR),
-        ("Living Room", SENSOR_MOTION),
-        ("Garden Cam", SENSOR_CAMERA),
-    ]
-
-    for device_id, device_type in fallback_records:
-        try:
-            sensors.append(factory.create(device_type, device_id))
-        except DeviceFactoryError as exc:  # pragma: no cover - defensive
-            print(f"[Main] Failed to create fallback device '{device_id}': {exc}")
-
-    return sensors
-
-
-def initialize_devices_after_turn_on(system: System, ui_sensors):
-    """Refresh device objects once the system is fully initialized."""
-    loaded_sensors = _load_system_sensors(system)
-    if loaded_sensors:
-        ui_sensors.clear()
-        ui_sensors.extend(loaded_sensors)
-    system.sensors = ui_sensors
-
-    if system.system_controller:
-        for sensor in ui_sensors:
-            sensor.add_observer(system.system_controller)
-            if sensor.get_type() == SENSOR_CAMERA and hasattr(sensor, "take_picture"):
-                system.system_controller.add_camera(sensor)
-        print("[Main] Connected sensors to SystemController")
-
-    if system.camera_controller:
-        system.camera_controller.add_camera(350, 20)
-        system.camera_controller.add_camera(330, 208)
-        system.camera_controller.add_camera(332, 262)
-        print("[Main] Initialized 3 cameras in CameraController at floorplan black dot positions")
-
-
 def main():
     global safehome_system
     root = tk.Tk()
@@ -1273,9 +1210,7 @@ def main():
     ui_app = SafeHomeApp(root, safehome_system, ui_sensors)
 
     safehome_system.set_ui(ui_app)
-    safehome_system.on_turn_on_complete = lambda: initialize_devices_after_turn_on(
-        safehome_system, ui_sensors
-    )
+    SystemBootstrapper().attach_post_turn_on_hook(safehome_system, ui_sensors)
 
     t = threading.Thread(target=run_web, daemon=True)
     t.start()
