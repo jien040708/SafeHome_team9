@@ -14,7 +14,7 @@ class DeviceCamera(threading.Thread, InterfaceCamera):
     def __init__(self):
         super().__init__(daemon=True)
 
-        # Camera assets sit under virtual_device_v3/.
+        # Camera assets sit under the virtual_device assets directory.
         self.assets_root = Path(__file__).resolve().parent.parent
         self.cameraId = 0
         self.time = 0

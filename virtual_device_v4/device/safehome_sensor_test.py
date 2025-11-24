@@ -2,8 +2,40 @@ import tkinter as tk
 from tkinter import Label, Button, messagebox
 
 
+class SensorInputError(ValueError):
+    """Raised when the user-provided sensor ID is invalid."""
+
+
+def normalize_sensor_id(raw_value: str, empty_message: str) -> int:
+    """Return a validated integer ID or raise SensorInputError."""
+    text = (raw_value or "").strip()
+    if not text:
+        raise SensorInputError(empty_message)
+    if not text.isdigit():
+        raise SensorInputError("only digit allowed")
+    return int(text)
+
+
+def find_sensor_by_id(head, sensor_id: int):
+    """Iterate the linked list until a sensor with the given ID is found."""
+    scan = head
+    while scan is not None:
+        if getattr(scan, "sensor_id", None) == sensor_id:
+            return scan
+        scan = getattr(scan, "next_sensor", None)
+    return None
+
+
+def require_sensor(head, sensor_id: int):
+    """Return the sensor for the given ID or raise LookupError."""
+    sensor = find_sensor_by_id(head, sensor_id)
+    if sensor is None:
+        raise LookupError(f"ID {sensor_id} not exist")
+    return sensor
+
+
 class SafeHomeSensorTest(tk.Toplevel):
-    
+
     def __init__(self, master=None):
         super().__init__(master)
         self.title("Sensor Test")
@@ -71,57 +103,39 @@ class SafeHomeSensorTest(tk.Toplevel):
     
     def handle_windoor_action(self, action):
         """Handle Window/Door sensor actions (open/close)."""
-        input_number = self.input_sensor_id_windoor.get().strip()
-        
-        if not input_number:
-            messagebox.showwarning("Input Error", "input the WinDoorSensor's ID")
+        input_number = self.input_sensor_id_windoor.get()
+        try:
+            selected_id = normalize_sensor_id(input_number, "input the WinDoorSensor's ID")
+            sensor = require_sensor(self.head_windoor, selected_id)
+        except SensorInputError as exc:
+            messagebox.showwarning("Input Error", str(exc))
             return
-        
-        if not input_number.isdigit():
-            messagebox.showwarning("Input Error", "only digit allowed")
+        except LookupError as exc:
+            messagebox.showwarning("Sensor Not Found", str(exc))
             return
-        
-        selected_id = int(input_number)
-        
-        # Search for sensor with matching ID
-        scan = self.head_windoor
-        while scan is not None and scan.sensor_id != selected_id:
-            scan = scan.next_sensor
-        
-        if scan is None:
-            messagebox.showwarning("Sensor Not Found", f"ID {selected_id} not exist")
+
+        if action == "open":
+            sensor.intrude()
         else:
-            if action == "open":
-                scan.intrude()
-            else:  # close
-                scan.release()
-    
+            sensor.release()
+
     def handle_motion_action(self, action):
         """Handle Motion Detector actions (detect/clear)."""
-        input_number = self.input_sensor_id_motion.get().strip()
-        
-        if not input_number:
-            messagebox.showwarning("Input Error", "input the MotionDetector's ID")
+        input_number = self.input_sensor_id_motion.get()
+        try:
+            selected_id = normalize_sensor_id(input_number, "input the MotionDetector's ID")
+            sensor = require_sensor(self.head_motion, selected_id)
+        except SensorInputError as exc:
+            messagebox.showwarning("Input Error", str(exc))
             return
-        
-        if not input_number.isdigit():
-            messagebox.showwarning("Input Error", "only digit allowed")
+        except LookupError as exc:
+            messagebox.showwarning("Sensor Not Found", str(exc))
             return
-        
-        selected_id = int(input_number)
-        
-        # Search for sensor with matching ID
-        scan = self.head_motion
-        while scan is not None and scan.sensor_id != selected_id:
-            scan = scan.next_sensor
-        
-        if scan is None:
-            messagebox.showwarning("Sensor Not Found", f"ID {selected_id} not exist")
+
+        if action == "detect":
+            sensor.intrude()
         else:
-            if action == "detect":
-                scan.intrude()
-            else:  # clear
-                scan.release()
+            sensor.release()
 
 
 if __name__ == "__main__":

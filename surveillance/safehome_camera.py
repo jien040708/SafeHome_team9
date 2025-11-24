@@ -8,15 +8,18 @@ import sys
 from pathlib import Path
 
 from devices.camera import Camera as SensorCamera
-from utils.constants import STATE_IDLE
+from utils.constants import STATE_IDLE, VIRTUAL_DEVICE_DIR
 
-# Add virtual_device_v3 to path for DeviceCamera import
+# Add the appropriate virtual_device folder to sys.path for DeviceCamera import.
 project_root = Path(__file__).parent.parent
-virtual_device_path = project_root / "virtual_device_v3"
-if str(virtual_device_path) not in sys.path:
+virtual_device_path = project_root / VIRTUAL_DEVICE_DIR
+if virtual_device_path.exists() and str(virtual_device_path) not in sys.path:
     sys.path.insert(0, str(virtual_device_path))
 
-from device.device_camera import DeviceCamera as VirtualDeviceCamera
+try:
+    from device.device_camera import DeviceCamera as VirtualDeviceCamera
+except ModuleNotFoundError:  # Fallback when running inside repo without sys.path tweak
+    from virtual_device_v4.device.device_camera import DeviceCamera as VirtualDeviceCamera
 
 
 class SafeHomeCamera(SensorCamera):
@@ -42,15 +45,14 @@ class SafeHomeCamera(SensorCamera):
         self._pan_angle: float = 0.0
 
         # DeviceCamera 인스턴스 생성 및 ID 설정
-        # 이미지 파일은 virtual_device_v3 폴더에 있으므로 작업 디렉토리 변경 필요
+        # 이미지 파일은 virtual_device 폴더에 있으므로 작업 디렉토리 변경 필요
         import os
         original_cwd = os.getcwd()
         try:
-            # virtual_device_v3 폴더로 작업 디렉토리 변경
-            virtual_device_dir = project_root / "virtual_device_v3"
+            virtual_device_dir = project_root / VIRTUAL_DEVICE_DIR
             if virtual_device_dir.exists():
                 os.chdir(str(virtual_device_dir))
-            
+
             self._device_camera: VirtualDeviceCamera = VirtualDeviceCamera()
             self._device_camera.set_id(camera_id)
         finally:

@@ -2,6 +2,7 @@
 LogManager - 로그 인스턴스 관리
 이벤트 로그 저장, 조회, 검색 기능 제공
 """
+import sqlite3
 from typing import List, Optional
 from datetime import datetime
 from event_logging.log import Log
@@ -13,8 +14,9 @@ class LogManager:
     시스템 이벤트 로그를 관리하는 매니저 클래스
     """
 
-    def __init__(self):
-        self.storage = StorageManager()
+    def __init__(self, storage: Optional[StorageManager] = None):
+        # Allow dependency injection so we can exercise failure/retry logic in isolation.
+        self.storage = storage or StorageManager()
         self.logs_cache: List[Log] = []  # 메모리 캐시 (선택적)
 
     def save_log(self, log: Log) -> bool:
@@ -29,25 +31,46 @@ class LogManager:
         """
 
         time_str = log.get_date_time().strftime('%Y-%m-%d %H:%M:%S')
-        rows = self.storage.execute_update(
-            sql,
-            (
-                time_str,
-                log.get_event_type(),
-                log.get_description(),
-                log.get_user_id(),
-                log.get_interface_type() or 'control_panel',
-            ),
+        params = (
+            time_str,
+            log.get_event_type(),
+            log.get_description(),
+            log.get_user_id(),
+            log.get_interface_type() or 'control_panel',
         )
+
+        rows = self._execute_with_retry(sql, params)
 
         if rows > 0:
             log.set_event_id(self.storage.get_last_insert_id())
             self.logs_cache.append(log)
             print(f"[LogManager] Log saved: {log.get_event_type()}")
             return True
-        else:
-            print(f"[LogManager] Failed to save log.")
-            return False
+        print("[LogManager] Failed to save log.")
+        return False
+
+    def _execute_with_retry(self, sql: str, params: tuple, attempts: int = 2) -> int:
+        """Try the SQL update up to `attempts` times, reconnecting after the first failure."""
+        last_rows = -1
+        for attempt in range(attempts):
+            try:
+                last_rows = self.storage.execute_update(sql, params)
+            except sqlite3.Error as exc:
+                print(f"[LogManager] Storage error: {exc}")
+                last_rows = -1
+
+            if last_rows > 0:
+                return last_rows
+
+            if attempt < attempts - 1:
+                self._reconnect_storage()
+
+        return last_rows
+
+    def _reconnect_storage(self) -> None:
+        reconnect = getattr(self.storage, "connect", None)
+        if callable(reconnect):
+            reconnect()
 
     def log_event(
         self,

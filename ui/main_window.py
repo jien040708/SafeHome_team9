@@ -11,6 +11,9 @@ from security.interfaces import SecurityEventListener
 from domain.services import (
     ControlPanelLoginPresenter,
     ControlPanelResetPresenter,
+    ControlPanelChangePasswordPresenter,
+    ControlPanelSettingsPresenter,
+    PowerControlPresenter,
     ZonesViewModel,
     ModesViewModel,
 )
@@ -426,6 +429,7 @@ class MainMenuView(ttk.Frame):
         super().__init__(parent)
         self.system = system
         self.app = app
+        self.power_presenter = PowerControlPresenter(system)
 
         ttk.Label(self, text="SafeHome", style="Title.TLabel").pack(pady=(40, 30))
 
@@ -448,23 +452,17 @@ class MainMenuView(ttk.Frame):
 
     def turn_off_system(self):
         """Common Function 5: Turn the system off"""
-        result = messagebox.askyesno("Confirm", "Are you sure you want to turn off the system?")
-        if result:
-            # 로그아웃 먼저
-            if self.system.login_manager and self.system.login_manager.is_user_authenticated():
-                self.system.logout()
+        if not messagebox.askyesno("Confirm", "Are you sure you want to turn off the system?"):
+            return
 
-            # 시스템 종료
-            success = self.system.turn_off()
-
-            if success:
-                # PowerOff 뷰 리셋 및 이동
-                if "PowerOff" in self.app.frames:
-                    self.app.frames["PowerOff"].reset_view()
-                self.app.show_page("PowerOff")
-                messagebox.showinfo("System Off", "System has been turned off successfully.")
-            else:
-                messagebox.showerror("Error", "Failed to turn off the system.")
+        outcome = self.power_presenter.turn_off_system()
+        if outcome.success:
+            if "PowerOff" in self.app.frames:
+                self.app.frames["PowerOff"].reset_view()
+            self.app.show_page("PowerOff")
+            messagebox.showinfo("System Off", outcome.message)
+        else:
+            messagebox.showerror("Error", outcome.message)
 
 
 class ZonesView(ttk.Frame):
@@ -540,7 +538,7 @@ class ZonesView(ttk.Frame):
         canvas_frame.pack(side="left", padx=20, pady=20, expand=True)
 
         # [수정 2] floorplan.png 이미지 로드 (프로젝트 루트 기준 경로)
-        self.floor_img = self.app.load_image("virtual_device_v3/floorplan.png", (400, 300))
+        self.floor_img = self.app.load_image(f"{VIRTUAL_DEVICE_DIR}/floorplan.png", (400, 300))
 
         if self.floor_img:
             lbl_img = tk.Label(canvas_frame, image=self.floor_img, bg="white")
@@ -778,7 +776,7 @@ class ModesView(ttk.Frame):
         canvas_frame.pack(side="left", padx=20, pady=20, expand=True)
 
         # [수정 2] floorplan.png 이미지 로드 (크기 조절)
-        self.floor_img = self.app.load_image("virtual_device_v3/floorplan.png", (400, 300))
+        self.floor_img = self.app.load_image(f"{VIRTUAL_DEVICE_DIR}/floorplan.png", (400, 300))
 
         if self.floor_img:
             lbl_img = tk.Label(canvas_frame, image=self.floor_img, bg="white")
@@ -840,6 +838,8 @@ class MonitoringView(ttk.Frame):
         self.system = system
         self.app = app
         self.reset_presenter = ControlPanelResetPresenter(system)
+        self.change_password_presenter = ControlPanelChangePasswordPresenter(system)
+        self.settings_presenter = ControlPanelSettingsPresenter(system)
 
         header = ttk.Frame(self)
         header.pack(fill="x", pady=10, padx=10)
@@ -919,25 +919,16 @@ class MonitoringView(ttk.Frame):
 
     def save_settings(self):
         """시스템 설정 저장"""
-        try:
-            monitoring_phone = self.monitoring_phone_entry.get()
-            homeowner_phone = self.homeowner_phone_entry.get()
-            lock_time = int(self.lock_time_entry.get())
-            alarm_delay = int(self.alarm_delay_entry.get())
-
-            success = self.system.configure_system_setting(
-                monitoring_phone=monitoring_phone,
-                homeowner_phone=homeowner_phone,
-                lock_time=lock_time,
-                alarm_delay=alarm_delay
-            )
-
-            if success:
-                messagebox.showinfo("Success", "System settings saved successfully!")
-            else:
-                messagebox.showerror("Error", "Failed to save settings.")
-        except ValueError:
-            messagebox.showerror("Error", "Invalid input. Please enter valid numbers for time fields.")
+        outcome = self.settings_presenter.save_settings(
+            monitoring_phone=self.monitoring_phone_entry.get(),
+            homeowner_phone=self.homeowner_phone_entry.get(),
+            lock_time=self.lock_time_entry.get(),
+            alarm_delay=self.alarm_delay_entry.get(),
+        )
+        if outcome.alert_level == "info":
+            messagebox.showinfo("Success", outcome.message)
+        else:
+            messagebox.showerror("Error", outcome.message)
 
     def _create_password_tab(self, parent):
         """Common Function 7: Change master password through control panel"""
@@ -966,28 +957,24 @@ class MonitoringView(ttk.Frame):
 
     def change_password(self):
         """비밀번호 변경"""
-        old_pw = self.old_password_entry.get()
-        new_pw = self.new_password_entry.get()
-        confirm_pw = self.confirm_password_entry.get()
+        outcome = self.change_password_presenter.change_password(
+            self.old_password_entry.get(),
+            self.new_password_entry.get(),
+            self.confirm_password_entry.get(),
+        )
 
-        if new_pw != confirm_pw:
-            messagebox.showerror("Error", "New passwords do not match!")
-            return
-
-        if len(new_pw) < 4:
-            messagebox.showerror("Error", "Password must be at least 4 characters long.")
-            return
-
-        # Common Function 7: Change password
-        success = self.system.change_password(old_pw, new_pw)
-
-        if success:
-            messagebox.showinfo("Success", "Password changed successfully!")
-            self.old_password_entry.delete(0, tk.END)
-            self.new_password_entry.delete(0, tk.END)
-            self.confirm_password_entry.delete(0, tk.END)
+        if outcome.alert_level == "info":
+            messagebox.showinfo("Success", outcome.message)
         else:
-            messagebox.showerror("Error", "Failed to change password. Please check your current password.")
+            messagebox.showerror("Error", outcome.message)
+
+        if outcome.success:
+            for entry in (
+                self.old_password_entry,
+                self.new_password_entry,
+                self.confirm_password_entry,
+            ):
+                entry.delete(0, tk.END)
 
     def _create_control_tab(self, parent):
         """시스템 제어 탭"""

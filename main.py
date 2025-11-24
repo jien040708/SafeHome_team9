@@ -11,7 +11,7 @@ from ui.main_window import SafeHomeApp
 from utils.constants import *
 from domain.services.bootstrap_service import SystemBootstrapper
 
-app = Flask(__name__, static_folder='virtual_device_v3', static_url_path='/static')
+app = Flask(__name__, static_folder=VIRTUAL_DEVICE_DIR, static_url_path='/static')
 app.secret_key = os.urandom(24)  # 세션 암호화 키
 safehome_system = None
 
@@ -1149,16 +1149,16 @@ def open_camera_view_window(camera_id):
         import sys
         import os
         
-        # virtual_device_v3/example/example_camera.py 경로
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        camera_script = os.path.join(base_dir, 'virtual_device_v3', 'example', 'example_camera.py')
+        virtual_device_root = os.path.join(base_dir, VIRTUAL_DEVICE_DIR)
+        camera_script = os.path.join(virtual_device_root, 'example', 'example_camera.py')
         
         # 카메라 ID를 환경변수로 전달
         env = os.environ.copy()
         env['CAMERA_ID'] = str(camera_id)
         
-        # 작업 디렉토리를 virtual_device_v3로 설정 (camera 이미지 파일을 찾기 위해)
-        work_dir = os.path.join(base_dir, 'virtual_device_v3')
+        # 작업 디렉토리를 virtual_device로 설정 (camera 이미지 파일을 찾기 위해)
+        work_dir = virtual_device_root
         
         # Python 프로세스로 example_camera.py 실행
         if sys.platform == 'win32':

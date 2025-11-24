@@ -116,7 +116,7 @@ class TestSafeHomeCameraCoverage:
     
     @pytest.mark.coverage
     def test_initialization_virtual_device_path_handling(self):
-        """초기화 - virtual_device_v3 경로 처리 테스트"""
+        """초기화 - virtual_device assets 경로 처리 테스트"""
         camera = SafeHomeCamera(camera_id=1)
         
         # 경로가 올바르게 설정되었는지 확인
@@ -264,4 +264,3 @@ class TestSafeHomeCameraCoverage:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "-m", "coverage"])
-

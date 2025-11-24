@@ -77,3 +77,11 @@ The previous Codex review already pointed out several issues:
 
 For each step, I will provide the relevant files and a focused prompt.
 Please read `UC2_TODO.md` for the detailed task list and context.
+
+---
+
+## Coverage Workflow
+
+- We run `pytest --cov=. --cov-report=term --cov-report=json:coverage.json --cov-report=html` for every major change. The CI workflow in `.github/workflows/coverage.yml` enforces a **68%** minimum via `--cov-fail-under=68`, so coverage cannot regress silently.
+- Tests marked with `@pytest.mark.coverage` (see `pytest.ini`) are instrumentation-heavy scenarios; run `pytest -m coverage` when you need to regenerate detailed artifacts or investigate gaps.
+- After major refactors, update both `docs/test_coverage.md` and `docs/coverage_improvement_plan.md` so the snapshot and roadmap stay aligned with the latest run.
