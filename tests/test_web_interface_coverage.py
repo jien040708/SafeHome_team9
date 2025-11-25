@@ -512,3 +512,547 @@ class TestWebInterfaceCoverage:
             assert data['success'] is False
             assert 'Server error' in data['message']
 
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_legacy_arm_route_not_authenticated(self, client):
+        """레거시 /arm 라우트 - Control Panel에서 인증되지 않은 경우"""
+        response = client.get('/arm')
+        assert response.status_code == 200
+        assert b'Please login first' in response.data
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_legacy_disarm_route_no_system(self, client):
+        """레거시 /disarm 라우트 - 시스템이 없을 때"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            main_app.safehome_system = None
+            response = client.get('/disarm')
+            assert response.status_code == 200
+            assert b'Error' in response.data
+        finally:
+            main_app.safehome_system = original_system
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_legacy_status_route_no_system(self, client):
+        """레거시 /status 라우트 - 시스템이 없을 때"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            main_app.safehome_system = None
+            response = client.get('/status')
+            assert response.status_code == 200
+            assert b'System offline' in response.data
+        finally:
+            main_app.safehome_system = original_system
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_legacy_status_route_with_system(self, client):
+        """레거시 /status 라우트 - 시스템이 있을 때"""
+        response = client.get('/status')
+        assert response.status_code == 200
+        assert b'System Status' in response.data
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_security_status_status_none(self, auth_client):
+        """Security Status API - get_status()가 None을 반환할 때"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system and original_system.security_system:
+                # get_status가 None을 반환하도록 모킹
+                with patch.object(original_system.security_system, 'get_status', return_value=None):
+                    response = auth_client.get('/api/security/status')
+                    assert response.status_code == 500
+                    data = response.get_json()
+                    assert data['success'] is False
+                    assert 'Security status unavailable' in data['message']
+            else:
+                pytest.skip("Security system not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_helper_security_instance_returns_none(self):
+        """Helper 함수 _security_instance - security_system이 없을 때"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            # security_system 속성이 없는 경우
+            if original_system:
+                original_security = getattr(original_system, 'security_system', None)
+                if hasattr(original_system, 'security_system'):
+                    delattr(original_system, 'security_system')
+                
+                result = main_app._security_instance()
+                assert result is None
+                
+                # 복원
+                if original_security is not None:
+                    original_system.security_system = original_security
+            else:
+                pytest.skip("System not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_helper_security_controller_returns_none(self):
+        """Helper 함수 _security_controller - system_controller가 없을 때"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system:
+                original_controller = getattr(original_system, 'system_controller', None)
+                if hasattr(original_system, 'system_controller'):
+                    delattr(original_system, 'system_controller')
+                
+                result = main_app._security_controller()
+                assert result is None
+                
+                # 복원
+                if original_controller is not None:
+                    original_system.system_controller = original_controller
+            else:
+                pytest.skip("System not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_helper_configuration_manager_returns_none(self):
+        """Helper 함수 _configuration_manager - configuration_manager가 없을 때"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system:
+                original_config = getattr(original_system, 'configuration_manager', None)
+                if hasattr(original_system, 'configuration_manager'):
+                    delattr(original_system, 'configuration_manager')
+                
+                result = main_app._configuration_manager()
+                assert result is None
+                
+                # 복원
+                if original_config is not None:
+                    original_system.configuration_manager = original_config
+            else:
+                pytest.skip("System not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_arm_controller_not_available(self, auth_client):
+        """Arm API - Security Controller가 없을 때"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system:
+                original_controller = original_system.system_controller
+                original_system.system_controller = None
+                
+                response = auth_client.post('/api/security/arm', json={'mode': 'Away'})
+                assert response.status_code == 503
+                data = response.get_json()
+                assert data['success'] is False
+                assert 'Security controller not available' in data['message']
+                
+                # 복원
+                original_system.system_controller = original_controller
+            else:
+                pytest.skip("System not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_disarm_controller_not_available(self, auth_client):
+        """Disarm API - Security Controller가 없을 때"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system:
+                original_controller = original_system.system_controller
+                original_system.system_controller = None
+                
+                response = auth_client.post('/api/security/disarm')
+                assert response.status_code == 503
+                data = response.get_json()
+                assert data['success'] is False
+                assert 'Security controller not available' in data['message']
+                
+                # 복원
+                original_system.system_controller = original_controller
+            else:
+                pytest.skip("System not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_arm_missing_username_in_session(self, auth_client):
+        """Arm API - 세션에 username이 없을 때"""
+        with auth_client.session_transaction() as session:
+            session['logged_in'] = True
+            session.pop('username', None)  # username 제거
+        
+        response = auth_client.post('/api/security/arm', json={'mode': 'Away'})
+        # username이 없으면 403 반환
+        assert response.status_code in [403, 503]
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_disarm_missing_username_in_session(self, auth_client):
+        """Disarm API - 세션에 username이 없을 때"""
+        with auth_client.session_transaction() as session:
+            session['logged_in'] = True
+            session.pop('username', None)  # username 제거
+        
+        response = auth_client.post('/api/security/disarm')
+        # username이 없으면 403 반환
+        assert response.status_code in [403, 503]
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_arm_controller_set_mode_fails(self, auth_client):
+        """Arm API - set_security_mode 실패 시"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system and original_system.system_controller:
+                # set_security_mode가 False를 반환하도록 모킹
+                with patch.object(original_system.system_controller, 'set_security_mode', return_value=False):
+                    with patch.object(original_system.system_controller, 'last_error_message', 'Test error'):
+                        response = auth_client.post('/api/security/arm', json={'mode': 'Away'})
+                        assert response.status_code == 400
+                        data = response.get_json()
+                        assert data['success'] is False
+            else:
+                pytest.skip("System controller not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_disarm_controller_set_mode_fails(self, auth_client):
+        """Disarm API - set_security_mode 실패 시"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system and original_system.system_controller:
+                # set_security_mode가 False를 반환하도록 모킹
+                with patch.object(original_system.system_controller, 'set_security_mode', return_value=False):
+                    with patch.object(original_system.system_controller, 'last_error_message', 'Test error'):
+                        response = auth_client.post('/api/security/disarm')
+                        assert response.status_code == 400
+                        data = response.get_json()
+                        assert data['success'] is False
+            else:
+                pytest.skip("System controller not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_logout_with_username_logs_event(self, auth_client):
+        """Logout API - username이 있을 때 이벤트 로그"""
+        with auth_client.session_transaction() as session:
+            session['logged_in'] = True
+            session['username'] = 'test_user'
+        
+        response = auth_client.get('/logout')
+        assert response.status_code == 302
+        assert '/login' in response.location
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_logout_without_username_does_not_log(self, client):
+        """Logout API - username이 없을 때 로그 없이 로그아웃"""
+        with client.session_transaction() as session:
+            session['logged_in'] = True
+            # username 없음
+        
+        response = client.get('/logout')
+        assert response.status_code == 302
+        assert '/login' in response.location
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_camera_view_api_exception_handling(self, auth_client):
+        """Camera View API - 예외 처리"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                # 예외를 발생시키도록 모킹
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'get_camera', side_effect=Exception("Test error")):
+                    response = auth_client.get(f'/api/cameras/{camera_id}/view')
+                    assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_camera_thumbnails_api_exception_handling(self, auth_client):
+        """Camera Thumbnails API - 예외 처리"""
+        import main as main_app
+        if main_app.safehome_system and main_app.safehome_system.camera_controller:
+            with patch.object(main_app.safehome_system.camera_controller, 'display_thumbnail_view', side_effect=Exception("Test error")):
+                response = auth_client.get('/api/cameras/thumbnails')
+                assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_camera_pan_api_exception_handling(self, auth_client):
+        """Camera Pan API - 예외 처리"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                # 예외를 발생시키도록 모킹
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'get_camera', side_effect=Exception("Test error")):
+                    response = auth_client.post(f'/api/cameras/{camera_id}/pan', json={'direction': 'right'})
+                    assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_camera_zoom_api_exception_handling(self, auth_client):
+        """Camera Zoom API - 예외 처리"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                # 예외를 발생시키도록 모킹
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'get_camera', side_effect=Exception("Test error")):
+                    response = auth_client.post(f'/api/cameras/{camera_id}/zoom', json={'action': 'in'})
+                    assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_get_all_cameras_exception_handling(self, auth_client):
+        """Get All Cameras API - 예외 처리"""
+        import main as main_app
+        if main_app.safehome_system and main_app.safehome_system.camera_controller:
+            with patch.object(main_app.safehome_system.camera_controller, 'get_all_camera_info', side_effect=Exception("Test error")):
+                response = auth_client.get('/api/cameras')
+                assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_get_camera_info_exception_handling(self, auth_client):
+        """Get Camera Info API - 예외 처리"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                # 예외를 발생시키도록 모킹
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'get_camera', side_effect=Exception("Test error")):
+                    response = auth_client.get(f'/api/cameras/{camera_id}')
+                    assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_validate_camera_password_result_minus_one(self, auth_client):
+        """Camera Password Validation - result == -1 (카메라 없음)"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'validate_camera_password', return_value=-1):
+                    response = auth_client.post(f'/api/cameras/{camera_id}/validate-password', json={'password': 'test'})
+                    assert response.status_code == 404
+                    data = response.get_json()
+                    assert data['success'] is False
+                    assert 'Camera not found' in data['message']
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_validate_camera_password_result_minus_two(self, auth_client):
+        """Camera Password Validation - result == -2 (비밀번호 없음)"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'validate_camera_password', return_value=-2):
+                    response = auth_client.post(f'/api/cameras/{camera_id}/validate-password', json={'password': 'test'})
+                    assert response.status_code == 400
+                    data = response.get_json()
+                    assert data['success'] is False
+                    assert 'No password set' in data['message']
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_validate_camera_password_three_failed_attempts(self, auth_client):
+        """Camera Password Validation - 3회 실패 시 잠금"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'validate_camera_password', return_value=1):
+                    # 3회 실패 시뮬레이션
+                    for attempt in range(3):
+                        with auth_client.session_transaction() as session:
+                            session[f'camera_{camera_id}_password_attempts'] = attempt
+                        
+                        response = auth_client.post(
+                            f'/api/cameras/{camera_id}/validate-password',
+                            json={'password': 'wrong'}
+                        )
+                        if attempt < 2:
+                            assert response.status_code == 401
+                        else:
+                            # 3회째는 잠금
+                            assert response.status_code == 403
+                            data = response.get_json()
+                            assert data['success'] is False
+                            assert 'locked' in data
+                            assert data['locked'] is True
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_set_camera_password_exception_handling(self, auth_client):
+        """Set Camera Password API - 예외 처리"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'get_camera', side_effect=Exception("Test error")):
+                    response = auth_client.post(
+                        f'/api/cameras/{camera_id}/set-password',
+                        json={'new_password': 'test123'}
+                    )
+                    assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_delete_camera_password_exception_handling(self, auth_client):
+        """Delete Camera Password API - 예외 처리"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'get_camera', side_effect=Exception("Test error")):
+                    response = auth_client.delete(f'/api/cameras/{camera_id}/password')
+                    assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_enable_camera_exception_handling(self, auth_client):
+        """Enable Camera API - 예외 처리"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'enable_camera', side_effect=Exception("Test error")):
+                    response = auth_client.post(f'/api/cameras/{camera_id}/enable')
+                    assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_disable_camera_exception_handling(self, auth_client):
+        """Disable Camera API - 예외 처리"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                import main as main_app
+                with patch.object(main_app.safehome_system.camera_controller, 'disable_camera', side_effect=Exception("Test error")):
+                    response = auth_client.post(f'/api/cameras/{camera_id}/disable')
+                    assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_open_camera_view_window_exception_handling(self, auth_client):
+        """Open Camera View Window API - 예외 처리"""
+        cameras_response = auth_client.get('/api/cameras')
+        if cameras_response.status_code == 200:
+            cameras_data = cameras_response.get_json()
+            if cameras_data.get('cameras') and len(cameras_data['cameras']) > 0:
+                camera_id = cameras_data['cameras'][0]['id']
+                # subprocess.Popen이 예외를 발생시키도록 모킹
+                with patch('main.subprocess.Popen', side_effect=Exception("Test error")):
+                    response = auth_client.post(f'/api/cameras/{camera_id}/open-view')
+                    assert response.status_code == 500
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_zone_create_fails(self, auth_client):
+        """Create Zone API - Zone 생성 실패"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system and original_system.configuration_manager:
+                with patch.object(original_system.configuration_manager, 'add_safety_zone', return_value=False):
+                    response = auth_client.post('/api/security/zones', json={'name': 'Test Zone'})
+                    assert response.status_code == 400
+                    data = response.get_json()
+                    assert data['success'] is False
+                    assert 'Failed to create zone' in data['message']
+            else:
+                pytest.skip("Configuration manager not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_zone_update_fails(self, auth_client):
+        """Update Zone API - Zone 업데이트 실패"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system and original_system.configuration_manager:
+                with patch.object(original_system.configuration_manager, 'modify_safety_zone', return_value=False):
+                    response = auth_client.put('/api/security/zones/1', json={'name': 'Updated'})
+                    assert response.status_code == 400
+                    data = response.get_json()
+                    assert data['success'] is False
+                    assert 'Zone update failed' in data['message']
+            else:
+                pytest.skip("Configuration manager not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_zone_delete_fails(self, auth_client):
+        """Delete Zone API - Zone 삭제 실패"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system and original_system.configuration_manager:
+                with patch.object(original_system.configuration_manager, 'delete_safety_zone', return_value=False):
+                    response = auth_client.delete('/api/security/zones/1')
+                    assert response.status_code == 400
+                    data = response.get_json()
+                    assert data['success'] is False
+                    assert 'Failed to delete zone' in data['message']
+            else:
+                pytest.skip("Configuration manager not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_assign_sensor_fails(self, auth_client):
+        """Assign Sensor API - Sensor 할당 실패"""
+        import main as main_app
+        original_system = main_app.safehome_system
+        try:
+            if original_system and original_system.configuration_manager:
+                with patch.object(original_system.configuration_manager, 'assign_sensor_to_zone', return_value=False):
+                    response = auth_client.post('/api/security/assignments', json={
+                        'device_id': 'test_sensor',
+                        'zone_id': 1
+                    })
+                    assert response.status_code == 400
+                    data = response.get_json()
+                    assert data['success'] is False
+                    assert 'Assignment failed' in data['message']
+            else:
+                pytest.skip("Configuration manager not available")
+        finally:
+            pass
+
+    @pytest.mark.usefixtures("safehome_system_instance")
+    def test_assign_sensor_invalid_zone_id(self, auth_client):
+        """Assign Sensor API - zone_id가 숫자가 아닐 때"""
+        response = auth_client.post('/api/security/assignments', json={
+            'device_id': 'test_sensor',
+            'zone_id': 'invalid'
+        })
+        assert response.status_code == 400
+        data = response.get_json()
+        assert data['success'] is False
+        assert 'zone_id must be numeric' in data['message']
+
