@@ -6,6 +6,8 @@ __pycache__/
 .vscode/
 # OS files (MacOS)
 .DS_Store
+__MACOSX/
+._*
 
 # --- DATABASE FILES ---
 # SQLite file (SafeHome project standard)
