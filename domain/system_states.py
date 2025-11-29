@@ -1,6 +1,10 @@
 # domain/system_states.py
 from abc import ABC, abstractmethod
-from utils.constants import *
+from utils.constants import (
+    MODE_DISARMED, MODE_AWAY, MODE_STAY,
+    SENSOR_WIN_DOOR, SENSOR_MOTION, SENSOR_CAMERA,
+    STATE_OPEN, STATE_DETECTED
+)
 
 class SecurityState(ABC):
     @abstractmethod

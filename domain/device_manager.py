@@ -3,7 +3,9 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 
 from storage.storage_manager import StorageManager
-from utils.constants import *
+from utils.constants import (
+    SENSOR_WIN_DOOR, SENSOR_MOTION, SENSOR_CAMERA
+)
 
 
 class DeviceManager:

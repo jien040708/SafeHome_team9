@@ -6,7 +6,11 @@ from typing import Optional
 from PIL import Image, ImageTk
 import os
 from pathlib import Path
-from utils.constants import *
+from utils.constants import (
+    MODE_AWAY, MODE_DISARMED, MODE_STAY,
+    STATE_OPEN, STATE_CLOSED, STATE_DETECTED,
+    VIRTUAL_DEVICE_DIR
+)
 from security.interfaces import SecurityEventListener
 from domain.services import (
     ControlPanelLoginPresenter,

@@ -1,17 +1,25 @@
 import threading
 import tkinter as tk
 import os
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+from flask import (
+    Flask, render_template, request, jsonify, session, redirect, url_for
+)
 
 from devices.camera import Camera
 from devices.motion_detector import MotionDetector
 from devices.windoor_sensor import WindowDoorSensor
 from domain.system import System
 from ui.main_window import SafeHomeApp
-from utils.constants import *
+from utils.constants import (
+    MODE_AWAY, MODE_DISARMED, MODE_STAY, VIRTUAL_DEVICE_DIR
+)
 from domain.services.bootstrap_service import SystemBootstrapper
 
-app = Flask(__name__, static_folder=VIRTUAL_DEVICE_DIR, static_url_path='/static')
+app = Flask(
+    __name__,
+    static_folder=VIRTUAL_DEVICE_DIR,
+    static_url_path='/static'
+)
 app.secret_key = os.urandom(24)  # 세션 암호화 키
 safehome_system = None
 
@@ -38,7 +46,10 @@ def validate_first_password():
         password = data.get('password')
 
         # 디버깅: 입력된 username 확인
-        print(f"[DEBUG] Login attempt - Username: '{username}', Interface: 'web_browser'")
+        print(
+            f"[DEBUG] Login attempt - Username: '{username}', "
+            f"Interface: 'web_browser'"
+        )
 
         if not username or not password:
             return jsonify({
@@ -98,7 +109,10 @@ def validate_first_password():
             if safehome_system.log_manager:
                 safehome_system.log_manager.log_event(
                     'INFO',
-                    f'First password validation successful for user: {username}',
+                    (
+                        f'First password validation successful '
+                        f'for user: {username}'
+                    ),
                     username,
                     interface_type='web_browser',
                 )
@@ -112,7 +126,10 @@ def validate_first_password():
             if safehome_system.log_manager:
                 safehome_system.log_manager.log_event(
                     'WARNING',
-                    f'First password validation failed for user: {username}',
+                    (
+                        f'First password validation failed '
+                        f'for user: {username}'
+                    ),
                     username,
                     interface_type='web_browser',
                 )
@@ -156,20 +173,30 @@ def validate_second_password():
         if not safehome_system:
             return jsonify({
                 'success': False,
-                'message': 'System not initialized. Please start the SafeHome application.',
+                'message': (
+                    'System not initialized. '
+                    'Please start the SafeHome application.'
+                ),
                 'system_off': True
             }), 503
 
         # 시스템이 꺼져 있는 경우 자동으로 켜기 (웹 인터페이스를 위해)
         if safehome_system.system_state.value == "Off":
-            print("[Flask] System is off. Attempting to turn on automatically for web access...")
+            msg = (
+                "[Flask] System is off. "
+                "Attempting to turn on automatically for web access..."
+            )
+            print(msg)
             try:
                 if safehome_system.turn_on():
-                    print("[Flask] System turned on successfully for web access.")
+                    print("[Flask] System turned on successfully.")
                 else:
                     return jsonify({
                         'success': False,
-                        'message': 'Failed to start the system. Please check the application logs.',
+                        'message': (
+                            'Failed to start the system. '
+                            'Please check the application logs.'
+                        ),
                         'system_off': True
                     }), 503
             except Exception as e:
@@ -184,7 +211,10 @@ def validate_second_password():
         if not safehome_system.login_manager:
             return jsonify({
                 'success': False,
-                'message': 'Login service not available. Please turn on the system first.',
+                'message': (
+                    'Login service not available. '
+                    'Please turn on the system first.'
+                ),
                 'system_off': True
             }), 503
 
@@ -206,7 +236,10 @@ def validate_second_password():
             if safehome_system.log_manager:
                 safehome_system.log_manager.log_event(
                     'INFO',
-                    f'Web login successful for user: {username}',
+                    (
+                        f'Web login successful '
+                        f'for user: {username}'
+                    ),
                     username,
                     interface_type='web_browser',
                 )
@@ -221,7 +254,10 @@ def validate_second_password():
             if safehome_system.log_manager:
                 safehome_system.log_manager.log_event(
                     'WARNING',
-                    f'Second password validation failed for user: {username}',
+                    (
+                        f'Second password validation failed '
+                        f'for user: {username}'
+                    ),
                     username,
                     interface_type='web_browser',
                 )
