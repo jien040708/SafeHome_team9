@@ -46,15 +46,50 @@ def validate_first_password():
                 'message': 'Username and password are required'
             }), 400
 
-        # LoginManager를 통한 검증
-        if safehome_system and safehome_system.login_manager:
-            result = safehome_system.login_manager.validate_first_password(
-                username,
-                password,
-                'web_browser'
-            )
+        # 시스템이 초기화되지 않았거나 켜지지 않은 경우
+        if not safehome_system:
+            return jsonify({
+                'success': False,
+                'message': 'System not initialized. Please start the SafeHome application.',
+                'system_off': True
+            }), 503
 
-            if result['success']:
+        # 시스템이 꺼져 있는 경우 자동으로 켜기 (웹 인터페이스를 위해)
+        if safehome_system.system_state.value == "Off":
+            print("[Flask] System is off. Attempting to turn on automatically for web access...")
+            try:
+                if safehome_system.turn_on():
+                    print("[Flask] System turned on successfully for web access.")
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Failed to start the system. Please check the application logs.',
+                        'system_off': True
+                    }), 503
+            except Exception as e:
+                print(f"[Flask] Error turning on system: {e}")
+                return jsonify({
+                    'success': False,
+                    'message': f'Failed to start the system: {str(e)}',
+                    'system_off': True
+                }), 503
+
+        # LoginManager가 초기화되지 않은 경우
+        if not safehome_system.login_manager:
+            return jsonify({
+                'success': False,
+                'message': 'Login service not available. Please turn on the system first.',
+                'system_off': True
+            }), 503
+
+        # LoginManager를 통한 검증
+        result = safehome_system.login_manager.validate_first_password(
+            username,
+            password,
+            'web_browser'
+        )
+
+        if result['success']:
                 # 세션에 임시 저장 (First password 검증 완료)
                 session['temp_username'] = username
                 session['first_validated'] = True
@@ -86,11 +121,6 @@ def validate_first_password():
                 print(f"[DEBUG] Response locked status: {result.get('locked', False)}")
                 print(f"[DEBUG] Response message: {result.get('message', 'N/A')}")
                 return jsonify(result), 401
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'System not available'
-            }), 503
 
     except Exception as e:
         print(f"[Flask] First password validation error: {e}")
@@ -122,15 +152,50 @@ def validate_second_password():
                 'message': 'Second password is required'
             }), 400
 
-        # LoginManager를 통한 검증
-        if safehome_system and safehome_system.login_manager:
-            result = safehome_system.login_manager.validate_second_password(
-                username,
-                second_password,
-                'web_browser'
-            )
+        # 시스템이 초기화되지 않았거나 켜지지 않은 경우
+        if not safehome_system:
+            return jsonify({
+                'success': False,
+                'message': 'System not initialized. Please start the SafeHome application.',
+                'system_off': True
+            }), 503
 
-            if result['success']:
+        # 시스템이 꺼져 있는 경우 자동으로 켜기 (웹 인터페이스를 위해)
+        if safehome_system.system_state.value == "Off":
+            print("[Flask] System is off. Attempting to turn on automatically for web access...")
+            try:
+                if safehome_system.turn_on():
+                    print("[Flask] System turned on successfully for web access.")
+                else:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Failed to start the system. Please check the application logs.',
+                        'system_off': True
+                    }), 503
+            except Exception as e:
+                print(f"[Flask] Error turning on system: {e}")
+                return jsonify({
+                    'success': False,
+                    'message': f'Failed to start the system: {str(e)}',
+                    'system_off': True
+                }), 503
+
+        # LoginManager가 초기화되지 않은 경우
+        if not safehome_system.login_manager:
+            return jsonify({
+                'success': False,
+                'message': 'Login service not available. Please turn on the system first.',
+                'system_off': True
+            }), 503
+
+        # LoginManager를 통한 검증
+        result = safehome_system.login_manager.validate_second_password(
+            username,
+            second_password,
+            'web_browser'
+        )
+
+        if result['success']:
                 # 로그인 성공 - 세션 설정
                 session['logged_in'] = True
                 session['username'] = username
@@ -165,11 +230,6 @@ def validate_second_password():
                 print(f"[DEBUG] Response locked status: {result.get('locked', False)}")
                 print(f"[DEBUG] Response message: {result.get('message', 'N/A')}")
                 return jsonify(result), 401
-        else:
-            return jsonify({
-                'success': False,
-                'message': 'System not available'
-            }), 503
 
     except Exception as e:
         print(f"[Flask] Second password validation error: {e}")
