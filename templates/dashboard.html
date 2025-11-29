@@ -246,6 +246,11 @@
                 <div class="button-icon">📹</div>
                 <div>Surveillance</div>
             </button>
+            
+            <button class="main-button btn-success" onclick="goToZones()">
+                <div class="button-icon">🗺️</div>
+                <div>Zone Management</div>
+            </button>
         </div>
 
         <div id="controlMessage" class="message"></div>
@@ -377,6 +382,10 @@
 
     function goToSurveillance() {
         window.location.href = '/surveillance';
+    }
+
+    function goToZones() {
+        window.location.href = '/zones';
     }
 
     document.addEventListener('DOMContentLoaded', () => {

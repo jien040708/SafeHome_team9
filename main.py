@@ -90,37 +90,37 @@ def validate_first_password():
         )
 
         if result['success']:
-                # 세션에 임시 저장 (First password 검증 완료)
-                session['temp_username'] = username
-                session['first_validated'] = True
+            # 세션에 임시 저장 (First password 검증 완료)
+            session['temp_username'] = username
+            session['first_validated'] = True
 
-                # 이벤트 로그
-                if safehome_system.log_manager:
-                    safehome_system.log_manager.log_event(
-                        'INFO',
-                        f'First password validation successful for user: {username}',
-                        username,
-                        interface_type='web_browser',
-                    )
+            # 이벤트 로그
+            if safehome_system.log_manager:
+                safehome_system.log_manager.log_event(
+                    'INFO',
+                    f'First password validation successful for user: {username}',
+                    username,
+                    interface_type='web_browser',
+                )
 
-                return jsonify({
-                    'success': True,
-                    'message': 'First password correct'
-                }), 200
-            else:
-                # 실패 로그
-                if safehome_system.log_manager:
-                    safehome_system.log_manager.log_event(
-                        'WARNING',
-                        f'First password validation failed for user: {username}',
-                        username,
-                        interface_type='web_browser',
-                    )
-                # 디버깅: 응답 내용 출력
-                print(f"[DEBUG] First password validation result: {result}")
-                print(f"[DEBUG] Response locked status: {result.get('locked', False)}")
-                print(f"[DEBUG] Response message: {result.get('message', 'N/A')}")
-                return jsonify(result), 401
+            return jsonify({
+                'success': True,
+                'message': 'First password correct'
+            }), 200
+        else:
+            # 실패 로그
+            if safehome_system.log_manager:
+                safehome_system.log_manager.log_event(
+                    'WARNING',
+                    f'First password validation failed for user: {username}',
+                    username,
+                    interface_type='web_browser',
+                )
+            # 디버깅: 응답 내용 출력
+            print(f"[DEBUG] First password validation result: {result}")
+            print(f"[DEBUG] Response locked status: {result.get('locked', False)}")
+            print(f"[DEBUG] Response message: {result.get('message', 'N/A')}")
+            return jsonify(result), 401
 
     except Exception as e:
         print(f"[Flask] First password validation error: {e}")
@@ -196,40 +196,40 @@ def validate_second_password():
         )
 
         if result['success']:
-                # 로그인 성공 - 세션 설정
-                session['logged_in'] = True
-                session['username'] = username
-                session.pop('temp_username', None)
-                session.pop('first_validated', None)
+            # 로그인 성공 - 세션 설정
+            session['logged_in'] = True
+            session['username'] = username
+            session.pop('temp_username', None)
+            session.pop('first_validated', None)
 
-                # 이벤트 로그
-                if safehome_system.log_manager:
-                    safehome_system.log_manager.log_event(
-                        'INFO',
-                        f'Web login successful for user: {username}',
-                        username,
-                        interface_type='web_browser',
-                    )
+            # 이벤트 로그
+            if safehome_system.log_manager:
+                safehome_system.log_manager.log_event(
+                    'INFO',
+                    f'Web login successful for user: {username}',
+                    username,
+                    interface_type='web_browser',
+                )
 
-                return jsonify({
-                    'success': True,
-                    'message': 'Login successful',
-                    'redirect': url_for('dashboard')
-                }), 200
-            else:
-                # 실패 로그
-                if safehome_system.log_manager:
-                    safehome_system.log_manager.log_event(
-                        'WARNING',
-                        f'Second password validation failed for user: {username}',
-                        username,
-                        interface_type='web_browser',
-                    )
-                # 디버깅: 응답 내용 출력
-                print(f"[DEBUG] Second password validation result: {result}")
-                print(f"[DEBUG] Response locked status: {result.get('locked', False)}")
-                print(f"[DEBUG] Response message: {result.get('message', 'N/A')}")
-                return jsonify(result), 401
+            return jsonify({
+                'success': True,
+                'message': 'Login successful',
+                'redirect': url_for('dashboard')
+            }), 200
+        else:
+            # 실패 로그
+            if safehome_system.log_manager:
+                safehome_system.log_manager.log_event(
+                    'WARNING',
+                    f'Second password validation failed for user: {username}',
+                    username,
+                    interface_type='web_browser',
+                )
+            # 디버깅: 응답 내용 출력
+            print(f"[DEBUG] Second password validation result: {result}")
+            print(f"[DEBUG] Response locked status: {result.get('locked', False)}")
+            print(f"[DEBUG] Response message: {result.get('message', 'N/A')}")
+            return jsonify(result), 401
 
     except Exception as e:
         print(f"[Flask] Second password validation error: {e}")
@@ -284,6 +284,16 @@ def surveillance_page():
 
     username = session.get('username')
     return render_template('surveillance.html', username=username)
+
+
+@app.route('/zones')
+def zones_page():
+    """Zone Management 페이지 (로그인 필요)"""
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+
+    username = session.get('username')
+    return render_template('zone_management.html', username=username)
 
 
 @app.route('/api/settings', methods=['GET'])
