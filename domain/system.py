@@ -13,7 +13,7 @@ from auth.login_manager import LoginManager
 from event_logging.log_manager import LogManager
 from config.configuration_manager import ConfigurationManager
 from domain.system_controller import SystemController
-from utils.constants import *
+from utils.constants import STATE_OPEN, STATE_DETECTED
 from domain.device_manager import DeviceManager
 from devices.siren import Siren
 from security.security_system import SecuritySystem
