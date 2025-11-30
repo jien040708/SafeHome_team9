@@ -5,8 +5,8 @@ import pytest
 from interfaces.sensor_interface import ISensor
 
 
-class TestSensor(ISensor):
-    """ISensor 구현 테스트 클래스"""
+class MockSensorImpl(ISensor):
+    """ISensor 구현 Mock 클래스 (테스트용)"""
     
     def __init__(self, sensor_id, sensor_type, status):
         self._id = sensor_id
@@ -28,7 +28,7 @@ class TestISensorInterface:
     
     def test_isensor_implementation(self):
         """ISensor 구현 테스트"""
-        sensor = TestSensor("sensor1", "door", "closed")
+        sensor = MockSensorImpl("sensor1", "door", "closed")
         
         assert sensor.get_id() == "sensor1"
         assert sensor.get_type() == "door"
@@ -38,7 +38,7 @@ class TestISensorInterface:
         """ISensor 추상 메서드 확인"""
         # ISensor는 추상 클래스이므로 직접 인스턴스화 불가
         # 구현 클래스를 통해 테스트
-        sensor = TestSensor("sensor2", "motion", "active")
+        sensor = MockSensorImpl("sensor2", "motion", "active")
         
         # 모든 추상 메서드가 구현되어야 함
         assert hasattr(sensor, 'get_id')

@@ -20,6 +20,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      - name: Clean up test artifacts
+        run: |
+          find . -type d -name "__MACOSX" -exec rm -rf {} + 2>/dev/null || true
+          find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+          find . -name "*.pyc" -delete 2>/dev/null || true
       - name: Run pytest with coverage gate
         run: |
-          pytest --cov=security --cov=domain --cov=config --cov=auth --cov=storage --cov=surveillance --cov=devices --cov=event_logging --cov-report=term --cov-report=xml --cov-fail-under=68
+          pytest --ignore=virtual_device_v4 --ignore=__MACOSX --ignore-glob="**/__MACOSX/**" --cov=security --cov=domain --cov=config --cov=auth --cov=storage --cov=surveillance --cov=devices --cov=event_logging --cov-report=term --cov-report=xml --cov-fail-under=68
