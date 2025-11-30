@@ -10,6 +10,59 @@ from typing import Callable, Dict, Iterable, List, Optional, Set, TYPE_CHECKING
 from .events import SensorEvent, SensorStatus, SensorType
 
 
+class Alarm:
+    """
+    Alarm class as defined in the UML diagram.
+    Represents an alarm device with location and status.
+    """
+    
+    def __init__(self, alarm_id: int = 0, x_coord: int = 0, y_coord: int = 0):
+        self._id: int = alarm_id
+        self._x_coord: int = x_coord
+        self._y_coord: int = y_coord
+        self._status: bool = False  # False = not ringing, True = ringing
+    
+    def set_id(self, alarm_id: int) -> bool:
+        """Set the alarm ID."""
+        if alarm_id < 0:
+            return False
+        self._id = alarm_id
+        return True
+    
+    def get_id(self) -> int:
+        """Get the alarm ID."""
+        return self._id
+    
+    def get_location(self) -> tuple[int, int]:
+        """Get the alarm location as (x, y) coordinates."""
+        return (self._x_coord, self._y_coord)
+    
+    def is_ringing(self) -> bool:
+        """Check if the alarm is currently ringing."""
+        return self._status
+    
+    def ring_alarm(self, status_value: bool) -> None:
+        """
+        Ring or silence the alarm.
+        Args:
+            status_value: True to ring the alarm, False to silence it.
+        """
+        self._status = status_value
+        
+        if status_value:
+            # Alarm is ringing
+            print(f"🚨 [ALARM] Alarm {self._id} at ({self._x_coord}, {self._y_coord}) is RINGING! 🚨")
+            import sys
+            sys.stdout.write(f"🚨 [ALARM] Alarm {self._id} at ({self._x_coord}, {self._y_coord}) is RINGING! 🚨\n")
+            sys.stdout.flush()
+        else:
+            # Alarm is silenced
+            print(f"[ALARM] Alarm {self._id} at ({self._x_coord}, {self._y_coord}) is silenced.")
+            import sys
+            sys.stdout.write(f"[ALARM] Alarm {self._id} at ({self._x_coord}, {self._y_coord}) is silenced.\n")
+            sys.stdout.flush()
+
+
 class SecurityMode(Enum):
     """High-level security modes defined in the SRS."""
 
@@ -76,6 +129,8 @@ class SecuritySystem:
         self._delay_deadline: Optional[datetime] = None
         self._monitoring_call_scheduled = False
         self._last_trigger_event: Optional[SensorEvent] = None
+        self._alarm_started_at: Optional[datetime] = None
+        self._monitoring_deadline: Optional[datetime] = None
 
         self._get_delay_time = get_delay_time
         self._call_monitoring_service = call_monitoring_service
@@ -178,7 +233,26 @@ class SecuritySystem:
                 self._listener.on_alarm_cleared(cleared_by or "UNKNOWN")
 
         self._alarm_state = AlarmState.IDLE
+        self._alarm_started_at = None
+        self._monitoring_deadline = None
         self._log(None, "DISARMED", details=f"by {cleared_by}" if cleared_by else None)
+        self._notify_status_change()
+
+    def clear_alarm(self, *, cleared_by: Optional[str] = None) -> None:
+        """Clear the alarm without disarming the system."""
+        if self._alarm_state is AlarmState.IDLE:
+            return  # No alarm to clear
+
+        self._deactivate_siren()
+        self._alarm_state = AlarmState.IDLE
+        self._alarm_started_at = None
+        self._monitoring_deadline = None
+        self._monitoring_call_scheduled = False
+        
+        if self._listener:
+            self._listener.on_alarm_cleared(cleared_by or "UNKNOWN")
+        
+        self._log(None, "ALARM_CLEARED", details=f"by {cleared_by}" if cleared_by else None)
         self._notify_status_change()
 
     def handle_sensor_event(self, event: SensorEvent) -> None:
@@ -186,10 +260,14 @@ class SecuritySystem:
         Evaluate an incoming sensor event and start the entry delay/alarm cycle
         when appropriate.
         """
+        print(f"[SecuritySystem] handle_sensor_event called: sensor={event.sensor_id}, type={event.sensor_type.name}, status={event.status.name}, mode={self._mode.name}")
+        
         if self._mode is SecurityMode.DISARMED:
+            print(f"[SecuritySystem] System is DISARMED - ignoring sensor event")
             return
 
         if not self._is_sensor_armed(event):
+            print(f"[SecuritySystem] Sensor {event.sensor_id} is not armed - ignoring event")
             return
 
         now = event.timestamp
@@ -201,49 +279,106 @@ class SecuritySystem:
             self._log(event, "ALARM_ALREADY_ACTIVE")
             return
 
-        # Start entry delay
-        delay = self._get_delay_time()
-        self._delay_deadline = now + delay
-        self._alarm_state = AlarmState.ENTRY_DELAY
-        self._monitoring_call_scheduled = True
+        # Immediate alarm activation on sensor trigger
+        self._alarm_state = AlarmState.ALARM_ACTIVE
+        self._alarm_started_at = now
+        self._monitoring_call_scheduled = False
+        self._delay_deadline = None
         self._last_trigger_event = event
-
-        self._log(event, "ENTRY_DELAY_STARTED")
+        
+        # Log alarm activation
+        sensor_id = event.sensor_id or "Unknown"
+        print(f"🚨 [ALARM] Sensor {sensor_id} triggered - ALARM ACTIVATED! 🚨")
+        import sys
+        sys.stdout.write(f"🚨 [ALARM] Sensor {sensor_id} triggered - ALARM ACTIVATED! 🚨\n")
+        sys.stdout.flush()
+        
+        # Activate siren immediately
+        self._activate_siren()
+        if self._camera_gateway:
+            self._camera_gateway.trigger_all("INTRUSION")
+        
+        # Schedule monitoring service call after alarm_delay_time
+        delay_time = self._get_delay_time()
+        self._monitoring_deadline = now + delay_time
+        
+        self._log(event, "ALARM_TRIGGERED")
         if self._listener:
-            self._listener.on_entry_delay_started(event, self._delay_deadline)
+            self._listener.on_alarm_activated(event)
         self._notify_status_change()
 
     def tick(self, now: datetime) -> None:
         """
-        Periodic driver (e.g., called every second). If an entry delay expired,
-        escalate to full alarm and notify monitoring service.
+        Periodic driver (e.g., called every second). 
+        - If an entry delay expired, escalate to full alarm.
+        - If alarm is active and alarm_delay_time passed, notify monitoring service.
         """
+        # Handle entry delay expiration
         if (
             self._alarm_state is AlarmState.ENTRY_DELAY
             and self._delay_deadline is not None
             and now >= self._delay_deadline
         ):
             trigger = self._last_trigger_event
+            sensor_id = trigger.sensor_id if trigger else "Unknown"
+            
+            print(f"[SecuritySystem] Entry delay expired - ALARM ACTIVATED for sensor {sensor_id}!")
+            import sys
+            sys.stdout.write(f"[SecuritySystem] Entry delay expired - ALARM ACTIVATED for sensor {sensor_id}!\n")
+            sys.stdout.flush()
+            
             self._alarm_state = AlarmState.ALARM_ACTIVE
+            self._alarm_started_at = now
             self._monitoring_call_scheduled = False
             self._activate_siren()
             if self._camera_gateway:
                 self._camera_gateway.trigger_all("INTRUSION")
-            self._call_monitoring_service("INTRUSION_ALARM")
+            # Schedule monitoring service call after alarm_delay_time
+            delay_time = self._get_delay_time()
+            self._monitoring_deadline = now + delay_time
             self._log(trigger, "ALARM_TRIGGERED")
             if self._listener:
                 self._listener.on_alarm_activated(trigger)
             self._notify_status_change()
+        
+        # Handle monitoring service call after alarm_delay_time
+        if (
+            self._alarm_state is AlarmState.ALARM_ACTIVE
+            and self._monitoring_deadline is not None
+            and not self._monitoring_call_scheduled
+            and now >= self._monitoring_deadline
+        ):
+            # Get current condition information
+            sensor_states = self._get_monitored_sensors_state()
+            condition_info = f"Alarm active. Sensor states: {sensor_states}"
+            
+            self._call_monitoring_service(condition_info)
+            self._monitoring_call_scheduled = True
+            
+            print(f"[SecuritySystem] Monitoring service notified with condition information: {condition_info}")
+            import sys
+            sys.stdout.write(f"[SecuritySystem] Monitoring service notified with condition information: {condition_info}\n")
+            sys.stdout.flush()
 
     def trigger_panic(self) -> None:
-        """Immediate alarm + monitoring call regardless of armed mode."""
+        """Immediate alarm regardless of armed mode. Monitoring call scheduled after delay."""
         self._alarm_state = AlarmState.ALARM_ACTIVE
+        self._alarm_started_at = datetime.utcnow()
         self._delay_deadline = None
         self._monitoring_call_scheduled = False
+        
+        # Log panic alarm activation
+        print(f"🚨 [PANIC ALARM] PANIC button pressed - ALARM ACTIVATED! 🚨")
+        import sys
+        sys.stdout.write(f"🚨 [PANIC ALARM] PANIC button pressed - ALARM ACTIVATED! 🚨\n")
+        sys.stdout.flush()
+        
         self._activate_siren()
         if self._camera_gateway:
             self._camera_gateway.trigger_all("PANIC")
-        self._call_monitoring_service("PANIC")
+        # Schedule monitoring service call after alarm_delay_time
+        delay_time = self._get_delay_time()
+        self._monitoring_deadline = self._alarm_started_at + delay_time
         self._log(None, "PANIC_TRIGGERED")
         if self._listener:
             self._listener.on_alarm_activated(None)

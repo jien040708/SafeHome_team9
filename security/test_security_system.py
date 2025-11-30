@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from security.security_system import (
+    Alarm,
     AlarmState,
     SecurityMode,
     SecuritySystem,
@@ -259,3 +260,97 @@ def test_trigger_panic_from_disarmed():
     assert system.alarm_state is AlarmState.ALARM_ACTIVE
     assert siren.active is True
     assert monitoring.calls == ["PANIC"]
+
+
+def test_clear_alarm_from_active_state():
+    """Test clearing alarm when alarm is active."""
+    system, monitoring, siren = make_security_system(delay_seconds=0)
+    system.arm(SecurityMode.AWAY)
+    system.register_sensor("door1", SensorType.DOOR, zone_id="A")
+    system.assign_sensor_to_zone("door1", "A")
+
+    # Trigger alarm
+    event = SensorEvent(
+        sensor_id="door1",
+        zone_id="A",
+        sensor_type=SensorType.DOOR,
+        status=SensorStatus.OPEN,
+        timestamp=datetime.utcnow(),
+    )
+    system.handle_sensor_event(event)
+    assert system.alarm_state is AlarmState.ALARM_ACTIVE
+
+    # Clear alarm
+    system.clear_alarm(cleared_by="test_user")
+
+    assert system.alarm_state is AlarmState.IDLE
+    assert siren.active is False
+    assert system._alarm_started_at is None
+
+
+def test_clear_alarm_keeps_system_armed():
+    """Test that clearing alarm does not disarm the system."""
+    system, monitoring, siren = make_security_system(delay_seconds=0)
+    system.arm(SecurityMode.AWAY)
+    system.register_sensor("door1", SensorType.DOOR, zone_id="A")
+    system.assign_sensor_to_zone("door1", "A")
+
+    # Trigger alarm
+    event = SensorEvent(
+        sensor_id="door1",
+        zone_id="A",
+        sensor_type=SensorType.DOOR,
+        status=SensorStatus.OPEN,
+        timestamp=datetime.utcnow(),
+    )
+    system.handle_sensor_event(event)
+    assert system.alarm_state is AlarmState.ALARM_ACTIVE
+    assert system.mode is SecurityMode.AWAY
+
+    # Clear alarm
+    system.clear_alarm(cleared_by="test_user")
+
+    # System should still be armed
+    assert system.mode is SecurityMode.AWAY
+    assert system.alarm_state is AlarmState.IDLE
+
+
+def test_sensor_trigger_immediate_alarm_no_delay():
+    """Test that sensor trigger activates alarm immediately when delay is 0."""
+    system, monitoring, siren = make_security_system(delay_seconds=0)
+    system.arm(SecurityMode.AWAY)
+    system.register_sensor("door1", SensorType.DOOR, zone_id="A")
+    system.assign_sensor_to_zone("door1", "A")
+
+    event = SensorEvent(
+        sensor_id="door1",
+        zone_id="A",
+        sensor_type=SensorType.DOOR,
+        status=SensorStatus.OPEN,
+        timestamp=datetime.utcnow(),
+    )
+    system.handle_sensor_event(event)
+
+    # Should immediately activate alarm (no entry delay when delay is 0)
+    assert system.alarm_state is AlarmState.ALARM_ACTIVE
+    assert siren.active is True
+
+
+def test_alarm_class_basic_functionality():
+    """Test Alarm class basic functionality."""
+    alarm = Alarm(alarm_id=1, x_coord=100, y_coord=200)
+    assert alarm.get_id() == 1
+    assert alarm.get_location() == (100, 200)
+    assert alarm.is_ringing() is False
+
+    alarm.ring_alarm(True)
+    assert alarm.is_ringing() is True
+
+    alarm.ring_alarm(False)
+    assert alarm.is_ringing() is False
+
+    assert alarm.set_id(5) is True
+    assert alarm.get_id() == 5
+
+    assert alarm.set_id(-1) is False
+    assert alarm.get_id() == 5  # Should remain unchanged

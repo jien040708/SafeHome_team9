@@ -35,9 +35,26 @@ class DeviceManager:
             self.add_device("Garden Cam", SENSOR_CAMERA)
 
     def add_device(self, device_id: str, device_type: str) -> bool:
-        sql = "INSERT INTO devices (device_id, device_type) VALUES (?, ?)"
+        sql = "INSERT OR IGNORE INTO devices (device_id, device_type) VALUES (?, ?)"
         res = self.storage.execute_update(sql, (device_id, device_type))
         return res > 0
+    
+    def ensure_default_devices(self) -> bool:
+        """Ensure default devices exist in database."""
+        try:
+            result = self.storage.execute_query("SELECT count(*) as cnt FROM devices")
+            count = result[0]['cnt'] if result else 0
+            
+            if count == 0:
+                print("[DeviceManager] No devices found, initializing defaults...")
+                self.add_device("Front Door", SENSOR_WIN_DOOR)
+                self.add_device("Living Room", SENSOR_MOTION)
+                self.add_device("Garden Cam", SENSOR_CAMERA)
+                return True
+            return False
+        except Exception as e:
+            print(f"[DeviceManager] Error ensuring default devices: {e}")
+            return False
 
     def remove_device(self, device_id: str) -> bool:
         sql = "DELETE FROM devices WHERE device_id = ?"
@@ -48,11 +65,28 @@ class DeviceManager:
 
     def load_all_devices(self) -> List[Tuple[str, str]]:
         """Return the list of (device_id, device_type)."""
-        sql = "SELECT device_id, device_type FROM devices"
-        rows = self.storage.execute_query(sql)
-        if rows:
-            return [(r['device_id'], r['device_type']) for r in rows]
-        return []
+        try:
+            sql = "SELECT device_id, device_type FROM devices"
+            print(f"[DeviceManager] Executing query: {sql}")
+            rows = self.storage.execute_query(sql)
+            print(f"[DeviceManager] Query returned: {rows} (type: {type(rows)})")
+            
+            if rows is None:
+                print("[DeviceManager] Query returned None - database connection issue?")
+                return []
+            
+            if len(rows) == 0:
+                print("[DeviceManager] Query returned empty result")
+                return []
+            
+            result = [(r['device_id'], r['device_type']) for r in rows]
+            print(f"[DeviceManager] Loaded {len(result)} devices: {result}")
+            return result
+        except Exception as e:
+            print(f"[DeviceManager] Error loading devices: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
 
     def load_device_zone_assignments(self) -> Dict[str, int]:
         """Return mapping of device -> zone id."""

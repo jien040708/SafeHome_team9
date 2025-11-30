@@ -758,14 +758,29 @@ class ModesView(ttk.Frame):
         for label, mode_const in modes:
             ttk.Button(nav, text=label, style="Primary.TButton",
                        command=lambda m=mode_const: self.change_mode(m)).pack(pady=5, fill="x")
-        for label in ["Overnight Travel", "Guest Home"]:
-            ttk.Button(nav, text=label, style="Primary.TButton").pack(pady=5, fill="x")
+
+        # Panic Alarm Button
+        panic_button = tk.Button(nav, text="🚨 PANIC ALARM 🚨", 
+                                bg="#ed8936", fg="white", 
+                                font=("Helvetica", 12, "bold"),
+                                command=self.trigger_panic,
+                                relief="raised", bd=3)
+        panic_button.pack(pady=10, fill="x")
+
+        # Alarm Clear Button (shown only when alarm is active) - placed prominently
+        self.alarm_clear_button = tk.Button(nav, text="🚨 CLEAR ALARM 🚨", 
+                                           bg="#e53e3e", fg="white", 
+                                           font=("Helvetica", 14, "bold"),
+                                           command=self.clear_alarm,
+                                           relief="raised", bd=3)
+        self.alarm_clear_button.pack(pady=10, fill="x")
+        self.alarm_clear_button.pack_forget()  # Hidden by default
 
         self.mode_display = ttk.Label(nav, text="Current: Disarmed (IDLE)", font=("Helvetica", 14, "bold"),
                                       foreground="blue")
         self.mode_display.pack(pady=(10, 0))
         self.zones_label = ttk.Label(nav, text="Armed Zones: All", font=("Helvetica", 11), foreground="gray25")
-        self.zones_label.pack(pady=(0, 20))
+        self.zones_label.pack(pady=(0, 10))
 
         indicator_frame = ttk.Frame(nav)
         indicator_frame.pack(pady=(0, 15))
@@ -821,8 +836,51 @@ class ModesView(ttk.Frame):
             if status:
                 text = f"{status.mode.name} ({status.alarm_state.name})"
                 self.update_mode_display(text, status.armed_zones)
+                # Show/hide alarm clear button based on alarm state
+                from security.security_system import AlarmState
+                if status.alarm_state == AlarmState.ALARM_ACTIVE:
+                    if hasattr(self, 'alarm_clear_button'):
+                        # Check if button is already packed
+                        try:
+                            self.alarm_clear_button.pack_info()
+                        except:
+                            # Button not packed, pack it at the top for visibility
+                            self.alarm_clear_button.pack(pady=10, fill="x", before=self.mode_display)
+                else:
+                    if hasattr(self, 'alarm_clear_button'):
+                        try:
+                            self.alarm_clear_button.pack_info()
+                            self.alarm_clear_button.pack_forget()
+                        except:
+                            pass  # Button already hidden
             else:
                 self.update_mode_display(self.system.security_system.mode.name)
+                if hasattr(self, 'alarm_clear_button'):
+                    self.alarm_clear_button.pack_forget()
+    
+    def trigger_panic(self):
+        """Trigger panic alarm."""
+        if not messagebox.askyesno("Panic Alarm", "Trigger panic alarm? This will immediately activate the alarm system."):
+            return
+        
+        if self.controller:
+            if self.controller.trigger_panic():
+                messagebox.showwarning("PANIC ALARM", "Panic alarm activated!")
+                self.refresh()  # Refresh to update UI
+            else:
+                messagebox.showerror("Error", "Failed to trigger panic alarm")
+
+    def clear_alarm(self):
+        """Clear the alarm without disarming."""
+        if not messagebox.askyesno("Clear Alarm", "Clear the alarm? (System will remain armed)"):
+            return
+        
+        if self.controller:
+            if self.controller.clear_alarm():
+                messagebox.showinfo("Success", "Alarm cleared successfully")
+                self.refresh()  # Refresh to update UI
+            else:
+                messagebox.showerror("Error", "Failed to clear alarm")
 
     def _update_zone_indicator(self, armed_count: int):
         if not hasattr(self, "zone_indicator"):

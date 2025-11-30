@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeHome - Sensor Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .navbar {
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .navbar h1 {
+            font-size: 24px;
+            color: #667eea;
+        }
+
+        .navbar .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .navbar button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .navbar button:hover {
+            background: #5568d3;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #333;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+
+        .btn-success {
+            background: #48bb78;
+            color: white;
+            padding: 8px 16px;
+            font-size: 12px;
+            margin-right: 5px;
+        }
+
+        .btn-success:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-warning {
+            background: #ed8936;
+            color: white;
+            padding: 8px 16px;
+            font-size: 12px;
+        }
+
+        .btn-warning:hover {
+            background: #dd6b20;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table th,
+        table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        table th {
+            background: #f7fafc;
+            color: #2d3748;
+            font-weight: 600;
+        }
+
+        table tr:hover {
+            background: #f7fafc;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-inactive {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .status-unknown {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .message.success {
+            background: #c6f6d5;
+            color: #22543d;
+            display: block;
+        }
+
+        .message.error {
+            background: #fed7d7;
+            color: #742a2a;
+            display: block;
+        }
+
+        .message.info {
+            background: #bee3f8;
+            color: #2c5282;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h1>SafeHome - Sensor Management</h1>
+        <div class="user-info">
+            <button onclick="goToDashboard()">Back to Dashboard</button>
+            <button onclick="logout()">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>Sensor List</h2>
+            <div id="message" class="message"></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Device ID</th>
+                        <th>Type</th>
+                        <th>Zone</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sensorTableBody">
+                    <tr>
+                        <td colspan="5" style="text-align:center;color:#666;">Loading sensors...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+<script>
+    let sensorState = {
+        sensors: []
+    };
+
+    function showMessage(text, type = 'info') {
+        const msgEl = document.getElementById('message');
+        msgEl.textContent = text;
+        msgEl.className = 'message ' + type;
+        msgEl.style.display = 'block';
+        setTimeout(() => {
+            msgEl.style.display = 'none';
+        }, 4000);
+    }
+
+    function redirectIfUnauthorized(response) {
+        if (response.status === 401) {
+            window.location.href = '/login';
+            return true;
+        }
+        return false;
+    }
+
+    async function refreshSensorList() {
+        try {
+            console.log('[SensorManagement] Fetching sensors from API...');
+            const response = await fetch('/api/security/sensors');
+            console.log('[SensorManagement] Response status:', response.status);
+            
+            if (redirectIfUnauthorized(response)) {
+                return;
+            }
+            
+            const data = await response.json();
+            console.log('[SensorManagement] API response:', data);
+            
+            if (!response.ok || !data.success) {
+                const errorMsg = data.message || 'Unable to load sensors';
+                console.error('[SensorManagement] API error:', errorMsg);
+                console.error('[SensorManagement] Full error response:', data);
+                showMessage(errorMsg, 'error');
+                document.getElementById('sensorTableBody').innerHTML = 
+                    '<tr><td colspan="5" style="text-align:center;color:#f56565;padding:20px;">Error: ' + errorMsg + '<br/>Please check server logs for details.</td></tr>';
+                return;
+            }
+            
+            sensorState.sensors = data.sensors || [];
+            console.log('[SensorManagement] Loaded sensors:', sensorState.sensors.length);
+            console.log('[SensorManagement] Sensor data:', JSON.stringify(sensorState.sensors, null, 2));
+            
+            if (!data.sensors || data.sensors.length === 0) {
+                console.warn('[SensorManagement] No sensors found in response');
+                console.warn('[SensorManagement] Full API response:', JSON.stringify(data, null, 2));
+                showMessage('No sensors found in database. The system will attempt to initialize default sensors.', 'info');
+                // Try to refresh again after a short delay
+                setTimeout(() => {
+                    console.log('[SensorManagement] Retrying sensor load...');
+                    refreshSensorList();
+                }, 2000);
+            }
+            
+            renderSensorTable();
+        } catch (error) {
+            console.error('[SensorManagement] Error loading sensors:', error);
+            showMessage('Error loading sensors: ' + error.message, 'error');
+            document.getElementById('sensorTableBody').innerHTML = 
+                '<tr><td colspan="5" style="text-align:center;color:#f56565;">Error: ' + error.message + '</td></tr>';
+        }
+    }
+
+    function getStatusBadge(sensor) {
+        const status = sensor.status || 'Unknown';
+        let badgeClass = 'status-inactive';
+        let displayText = 'Not Triggered';
+        
+        // Check if sensor is in a triggered state
+        const triggeredStates = ['Open', 'Motion Detected', 'Detected', 'Recording', 'Triggered'];
+        const isTriggered = triggeredStates.some(triggeredState => 
+            status && status.toString().toLowerCase().includes(triggeredState.toLowerCase())
+        );
+        
+        if (isTriggered) {
+            badgeClass = 'status-active';
+            displayText = 'Triggered';
+        }
+        
+        return `<span class="status-badge ${badgeClass}">${displayText}</span>`;
+    }
+
+    function renderSensorTable() {
+        console.log('[SensorManagement] renderSensorTable called with', sensorState.sensors.length, 'sensors');
+        const body = document.getElementById('sensorTableBody');
+        if (!body) {
+            console.error('[SensorManagement] sensorTableBody element not found!');
+            return;
+        }
+        
+        body.innerHTML = '';
+        
+        if (!sensorState.sensors || sensorState.sensors.length === 0) {
+            console.warn('[SensorManagement] No sensors to display');
+            body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#666;padding:20px;">No sensors found in database. Please check the server logs.</td></tr>';
+            return;
+        }
+        
+        console.log('[SensorManagement] Rendering', sensorState.sensors.length, 'sensors');
+        for (const sensor of sensorState.sensors) {
+            const row = document.createElement('tr');
+            const zoneName = sensor.zone_name || (sensor.zone_id ? `Zone ${sensor.zone_id}` : 'Unassigned');
+            const statusBadge = getStatusBadge(sensor);
+            
+            // Single trigger button for all sensors
+            const actionButtons = `
+                <button class="btn btn-success" onclick="triggerSensor('${sensor.device_id}', 'trigger')">Trigger</button>
+            `;
+
+            row.innerHTML = `
+                <td>${sensor.device_id}</td>
+                <td>${sensor.device_type}</td>
+                <td>${zoneName}</td>
+                <td>${statusBadge}</td>
+                <td>${actionButtons}</td>
+            `;
+            body.appendChild(row);
+        }
+    }
+
+    async function triggerSensor(deviceId, action) {
+        try {
+            const response = await fetch('/api/security/sensors/trigger', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({device_id: deviceId, action: action})
+            });
+            if (redirectIfUnauthorized(response)) {
+                return;
+            }
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Trigger failed');
+            }
+            
+            let message = `Sensor ${deviceId} ${action} executed successfully`;
+            
+            // Check if alarm was activated
+            if (data.alarm_activated) {
+                message += ' - 🚨 ALARM ACTIVATED! 🚨';
+                showMessage(message, 'error');
+                // Alert user about alarm activation
+                if (confirm('🚨 ALARM HAS BEEN ACTIVATED! 🚨\n\nWould you like to go to the dashboard to clear the alarm?')) {
+                    // Add refresh parameter to force immediate refresh on dashboard
+                    window.location.href = '/dashboard?refresh=true';
+                }
+            } else {
+                // Check current system status
+                if (data.status) {
+                    const alarmState = data.status.alarm_state || 'IDLE';
+                    if (alarmState.toUpperCase() === 'DISARMED') {
+                        message += '\nNote: System is DISARMED. Alarm will not activate until system is armed.';
+                        showMessage(message, 'info');
+                    } else if (alarmState.toUpperCase() !== 'ALARM_ACTIVE') {
+                        showMessage(message, 'success');
+                    }
+                } else {
+                    showMessage(message, 'success');
+                }
+            }
+            
+            await refreshSensorList();
+        } catch (error) {
+            showMessage(error.message, 'error');
+        }
+    }
+
+    function goToDashboard() {
+        window.location.href = '/dashboard';
+    }
+
+    function logout() {
+        if (confirm('Are you sure you want to logout?')) {
+            window.location.href = '/logout';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        refreshSensorList();
+    });
+</script>
+</body>
+</html>
+

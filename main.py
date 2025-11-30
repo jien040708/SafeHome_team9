@@ -11,7 +11,9 @@ from devices.windoor_sensor import WindowDoorSensor
 from domain.system import System
 from ui.main_window import SafeHomeApp
 from utils.constants import (
-    MODE_AWAY, MODE_DISARMED, MODE_STAY, VIRTUAL_DEVICE_DIR
+    MODE_AWAY, MODE_DISARMED, MODE_STAY, VIRTUAL_DEVICE_DIR,
+    SENSOR_WIN_DOOR, SENSOR_MOTION, SENSOR_CAMERA, STATE_CLEAR,
+    STATE_OPEN, STATE_CLOSED
 )
 from domain.services.bootstrap_service import SystemBootstrapper
 
@@ -330,6 +332,16 @@ def zones_page():
 
     username = session.get('username')
     return render_template('zone_management.html', username=username)
+
+
+@app.route('/sensor-management')
+def sensor_management_page():
+    """Sensor Management 페이지 (로그인 필요)"""
+    if not session.get('logged_in'):
+        return redirect(url_for('login_page'))
+
+    username = session.get('username')
+    return render_template('sensor_management.html', username=username)
 
 
 @app.route('/api/settings', methods=['GET'])
@@ -741,20 +753,69 @@ def _serialize_zones(config):
 
 
 def _serialize_sensors(config):
-    devices = config.device_manager.load_all_devices()
-    assignments = config.list_sensor_assignments()
-    zone_map = config.get_zone_name_map()
+    try:
+        print("[Flask] _serialize_sensors: Starting...")
+        if not hasattr(config, 'device_manager') or not config.device_manager:
+            print("[Flask] Device manager not available in config")
+            return []
+        
+        print("[Flask] Calling device_manager.load_all_devices()...")
+        devices = config.device_manager.load_all_devices()
+        print(f"[Flask] Loaded {len(devices)} devices from device_manager")
+        print(f"[Flask] Device list: {devices}")
+        
+        if not devices:
+            print("[Flask] No devices found in database, attempting to ensure defaults...")
+            # Try to ensure default devices exist
+            try:
+                config.device_manager.ensure_default_devices()
+                devices = config.device_manager.load_all_devices()
+                print(f"[Flask] After ensuring defaults, loaded {len(devices)} devices")
+                print(f"[Flask] Device list after ensuring defaults: {devices}")
+            except Exception as init_error:
+                print(f"[Flask] Error ensuring default devices: {init_error}")
+                import traceback
+                traceback.print_exc()
+        
+        print("[Flask] Getting sensor assignments and zone map...")
+        assignments = config.list_sensor_assignments()
+        print(f"[Flask] Assignments: {assignments}")
+        zone_map = config.get_zone_name_map()
+        print(f"[Flask] Zone map: {zone_map}")
 
-    payload = []
-    for device_id, device_type in devices:
-        zone_id = assignments.get(device_id)
-        payload.append({
-            'device_id': device_id,
-            'device_type': device_type,
-            'zone_id': zone_id,
-            'zone_name': zone_map.get(str(zone_id), str(zone_id)) if zone_id is not None else None,
-        })
-    return payload
+        payload = []
+        for device_id, device_type in devices:
+            zone_id = assignments.get(device_id)
+            
+            # Get sensor status from system if available
+            status = "Unknown"
+            if safehome_system and safehome_system.sensors:
+                for sensor in safehome_system.sensors:
+                    if sensor.get_id() == device_id:
+                        try:
+                            if hasattr(sensor, 'get_status'):
+                                status = sensor.get_status() or "Unknown"
+                        except Exception:
+                            status = "Unknown"
+                        break
+            
+            sensor_data = {
+                'device_id': device_id,
+                'device_type': device_type,
+                'zone_id': zone_id,
+                'zone_name': zone_map.get(str(zone_id), str(zone_id)) if zone_id is not None else None,
+                'status': status,
+            }
+            payload.append(sensor_data)
+            print(f"[Flask] Added sensor to payload: {sensor_data}")
+        
+        print(f"[Flask] _serialize_sensors: Returning {len(payload)} sensors")
+        return payload
+    except Exception as e:
+        print(f"[Flask] Error in _serialize_sensors: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 @app.route('/api/security/zones', methods=['GET'])
@@ -830,19 +891,255 @@ def api_security_delete_zone(zone_id: int):
 
 @app.route('/api/security/sensors', methods=['GET'])
 def api_security_sensors():
+    print("[Flask] /api/security/sensors called")
+    auth_error = _require_api_login()
+    if auth_error:
+        print("[Flask] Authentication failed")
+        return auth_error
+
+    # Check if system is available
+    if not safehome_system:
+        print("[Flask] System not initialized")
+        return jsonify({
+            'success': False,
+            'message': 'System not initialized. Please start the SafeHome application.'
+        }), 503
+
+    # Ensure system is turned on (required for configuration manager)
+    if safehome_system.system_state.value == "Off":
+        print("[Flask] System is off. Attempting to turn on automatically...")
+        try:
+            if safehome_system.turn_on():
+                print("[Flask] System turned on successfully for sensor API")
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to start the system. Please check the application logs.'
+                }), 503
+        except Exception as e:
+            print(f"[Flask] Error turning on system: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({
+                'success': False,
+                'message': f'Failed to start the system: {str(e)}'
+            }), 503
+
+    try:
+        print("[Flask] Getting configuration manager...")
+        config = _configuration_manager()
+        if not config:
+            print("[Flask] Configuration manager not available - system may not be initialized")
+            return jsonify({
+                'success': False,
+                'message': 'Configuration manager unavailable. System may not be initialized properly.'
+            }), 503
+
+        if not hasattr(config, 'device_manager') or not config.device_manager:
+            print("[Flask] Device manager not available in configuration manager")
+            return jsonify({'success': False, 'message': 'Device manager unavailable'}), 503
+
+        print("[Flask] Serializing sensors and zones...")
+        sensors = _serialize_sensors(config)
+        zones = _serialize_zones(config)
+        
+        print(f"[Flask] Loaded {len(sensors)} sensors from database")
+        print(f"[Flask] Sensor details: {sensors}")
+        
+        response_data = {
+            'success': True,
+            'sensors': sensors,
+            'zones': zones
+        }
+        print(f"[Flask] Returning response with {len(sensors)} sensors")
+        
+        return jsonify(response_data), 200
+    except Exception as e:
+        print(f"[Flask] Error loading sensors: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error loading sensors: {str(e)}'
+        }), 500
+
+
+@app.route('/api/security/sensors/trigger', methods=['POST'])
+def api_security_sensor_trigger():
+    """센서 trigger 켜기/끄기 API"""
     auth_error = _require_api_login()
     if auth_error:
         return auth_error
 
-    config = _configuration_manager()
-    if not config:
-        return jsonify({'success': False, 'message': 'Configuration manager unavailable'}), 503
+    if not safehome_system:
+        return jsonify({'success': False, 'message': 'System not available'}), 503
 
-    return jsonify({
-        'success': True,
-        'sensors': _serialize_sensors(config),
-        'zones': _serialize_zones(config)
-    }), 200
+    data = request.get_json(silent=True) or {}
+    device_id = data.get('device_id')
+    action = data.get('action')
+
+    if not device_id or not action:
+        return jsonify({'success': False, 'message': 'device_id and action are required'}), 400
+
+    # Find sensor by device_id
+    sensor = None
+    if safehome_system.sensors:
+        for s in safehome_system.sensors:
+            if s.get_id() == device_id:
+                sensor = s
+                break
+
+    if not sensor:
+        return jsonify({'success': False, 'message': f'Sensor {device_id} not found'}), 404
+
+    try:
+        # Only 'trigger' action is supported
+        if action != 'trigger':
+            return jsonify({'success': False, 'message': 'Only "trigger" action is supported'}), 400
+        
+        sensor_type = sensor.get_type()
+        status_for_controller = "Triggered"
+        
+        # Trigger sensor based on type
+        if sensor_type == SENSOR_WIN_DOOR:
+            # Toggle between open/closed for window/door sensor
+            if hasattr(sensor, 'get_status'):
+                current_status = sensor.get_status()
+                if current_status == STATE_CLOSED:
+                    if hasattr(sensor, 'set_open'):
+                        sensor.set_open()
+                        status_for_controller = "Open"
+                    else:
+                        return jsonify({'success': False, 'message': 'Sensor does not support open action'}), 400
+                else:
+                    if hasattr(sensor, 'set_closed'):
+                        sensor.set_closed()
+                        status_for_controller = "Closed"
+                    else:
+                        return jsonify({'success': False, 'message': 'Sensor does not support close action'}), 400
+            else:
+                # Default to open if can't check status
+                if hasattr(sensor, 'set_open'):
+                    sensor.set_open()
+                    status_for_controller = "Open"
+        
+        elif sensor_type == SENSOR_MOTION:
+            # Trigger motion detection
+            if hasattr(sensor, 'detect_motion'):
+                sensor.detect_motion()
+                status_for_controller = "Motion Detected"
+            else:
+                return jsonify({'success': False, 'message': 'Sensor does not support detect_motion'}), 400
+        
+        elif sensor_type == SENSOR_CAMERA:
+            # Trigger camera
+            if hasattr(sensor, 'take_picture'):
+                sensor.take_picture()
+                status_for_controller = "Recording"
+            elif hasattr(sensor, 'trigger'):
+                sensor.trigger()
+                status_for_controller = "Triggered"
+            else:
+                return jsonify({'success': False, 'message': 'Sensor does not support trigger action'}), 400
+        
+        else:
+            # Generic trigger for other sensor types
+            if hasattr(sensor, 'trigger'):
+                sensor.trigger()
+                status_for_controller = "Triggered"
+            else:
+                return jsonify({'success': False, 'message': 'Sensor does not support trigger action'}), 400
+
+        # Update sensor status in system controller if available
+        alarm_activated = False
+        if safehome_system.system_controller:
+            try:
+                safehome_system.system_controller.update_sensor_status(
+                    device_id, 
+                    sensor_type, 
+                    status_for_controller
+                )
+                # Check if alarm was activated
+                if safehome_system.security_system:
+                    status = safehome_system.security_system.get_status()
+                    if status and status.alarm_state.name == 'ALARM_ACTIVE':
+                        alarm_activated = True
+                        print(f"[Flask] Alarm activated after sensor {device_id} trigger")
+            except Exception as exc:
+                print(f"[Flask] Failed to update sensor status in controller: {exc}")
+
+        # Get current security status
+        status_payload = None
+        if safehome_system.security_system:
+            try:
+                status_payload, _ = _build_security_status_payload()
+            except Exception as exc:
+                print(f"[Flask] Failed to get security status: {exc}")
+
+        response_data = {
+            'success': True,
+            'message': f'Sensor {device_id} triggered successfully',
+            'alarm_activated': alarm_activated
+        }
+        
+        if status_payload:
+            response_data['status'] = status_payload
+
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        print(f"[Flask] Sensor trigger error: {e}")
+        return jsonify({'success': False, 'message': f'Error triggering sensor: {str(e)}'}), 500
+
+
+@app.route('/api/security/clear-alarm', methods=['POST'])
+def api_security_clear_alarm():
+    """알람 종료 API"""
+    auth_error = _require_api_login()
+    if auth_error:
+        return auth_error
+
+    if not safehome_system:
+        return jsonify({'success': False, 'message': 'System not available'}), 503
+
+    security_system = _security_instance()
+    if not security_system:
+        return jsonify({
+            'success': False,
+            'message': 'Security system not available'
+        }), 503
+
+    username = session.get('username', 'Unknown')
+    
+    try:
+        security_system.clear_alarm(cleared_by=username)
+        
+        if safehome_system and getattr(safehome_system, 'log_manager', None):
+            safehome_system.log_manager.log_event(
+                event_type='ALARM_CLEARED',
+                description='Alarm cleared via web dashboard',
+                user_id=username,
+                interface_type='web_browser',
+            )
+
+        status_payload, error = _build_security_status_payload()
+        if error:
+            return error
+
+        return jsonify({
+            'success': True,
+            'message': 'Alarm cleared successfully',
+            'status': status_payload
+        }), 200
+
+    except Exception as e:
+        print(f"[Flask] Clear alarm error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error clearing alarm: {str(e)}'
+        }), 500
 
 
 @app.route('/api/security/assignments', methods=['POST'])
@@ -1297,7 +1594,24 @@ def open_camera_view_window(camera_id):
             'message': f'Failed to open camera view: {str(e)}'
         }), 500
 
+def _security_tick_loop():
+    """Periodic tick for security system (web interface)"""
+    import time
+    from datetime import datetime
+    
+    while True:
+        try:
+            if safehome_system and getattr(safehome_system, "security_system", None):
+                safehome_system.security_system.tick(datetime.utcnow())
+        except Exception as exc:
+            print(f"[Web] Security tick error: {exc}")
+        time.sleep(1)
+
 def run_web():
+    # Start security tick thread for web interface
+    tick_thread = threading.Thread(target=_security_tick_loop, daemon=True)
+    tick_thread.start()
+    
     app.run(port=5000, debug=False, use_reloader=False)
 
 
