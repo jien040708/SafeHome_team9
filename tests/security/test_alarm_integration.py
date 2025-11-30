@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
-from security.security_system import Alarm, AlarmState, SecuritySystem
+from security.security_system import Alarm, AlarmState, SecurityMode, SecuritySystem
 from security.events import SensorEvent, SensorStatus, SensorType
 
 

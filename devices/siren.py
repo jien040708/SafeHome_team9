@@ -8,16 +8,9 @@ class Siren:
             self.is_active = True
             siren_message = f"🚨 [SIREN] {self.device_id} WEE-WOO-WEE-WOO! 🚨"
             print(siren_message)
-            # Also print to console for visibility
-            import sys
-            sys.stdout.write(siren_message + "\n")
-            sys.stdout.flush()
 
     def deactivate(self):
         if self.is_active:
             self.is_active = False
             silence_message = f"[SIREN] {self.device_id} Silenced."
             print(silence_message)
-            import sys
-            sys.stdout.write(silence_message + "\n")
-            sys.stdout.flush()

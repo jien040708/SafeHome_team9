@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from domain.system_controller import SystemController
-from security.security_system import AlarmState, SecuritySystem
+from security.security_system import AlarmState, SecurityMode, SecuritySystem
 from security.events import SensorEvent, SensorStatus, SensorType
 from tests.test_controller_security_flow import make_controller
 

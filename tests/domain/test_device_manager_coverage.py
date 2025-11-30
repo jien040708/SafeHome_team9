@@ -107,20 +107,19 @@ class TestDeviceManagerCoverage:
             
             assert result is False
     
-    def test_get_device_by_id_found(self, device_manager):
-        """디바이스 ID로 조회 - 찾음"""
-        mock_row = create_mock_row({'device_id': 'device1', 'device_type': 'Window/Door Sensor'})
-        
+    def test_get_device_zone_found(self, device_manager):
+        """디바이스 Zone 조회 - 찾음"""
+        mock_row = create_mock_row({'zone_id': 1})
+
         with patch.object(device_manager.storage, 'execute_query', return_value=[mock_row]):
-            device = device_manager.get_device_by_id("device1")
-            
-            assert device is not None
-            assert device['device_id'] == 'device1'
-    
-    def test_get_device_by_id_not_found(self, device_manager):
-        """디바이스 ID로 조회 - 없음"""
+            zone = device_manager.get_device_zone("device1")
+
+            assert zone == 1
+
+    def test_get_device_zone_not_found(self, device_manager):
+        """디바이스 Zone 조회 - 없음"""
         with patch.object(device_manager.storage, 'execute_query', return_value=[]):
-            device = device_manager.get_device_by_id("nonexistent")
-            
-            assert device is None
+            zone = device_manager.get_device_zone("nonexistent")
+
+            assert zone is None
 

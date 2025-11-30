@@ -480,13 +480,13 @@ def test_resolve_zone_from_sensor_zones():
 def test_check_doors_windows_closed_no_zones():
     """Test _check_doors_and_windows_closed with no zones specified."""
     sensor_states = {
-        "door1": SensorStatus.CLOSED,
-        "window1": SensorStatus.CLOSED,
+        "door1": SensorStatus.NORMAL,
+        "window1": SensorStatus.NORMAL,
     }
     system, _, _ = make_security_system(sensor_states=sensor_states)
     system.register_sensor("door1", SensorType.DOOR)
     system.register_sensor("window1", SensorType.WINDOW)
-    
+
     result = system._check_doors_and_windows_closed(set())
     assert result is True
 

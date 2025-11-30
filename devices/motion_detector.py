@@ -12,3 +12,8 @@ class MotionDetector(DeviceBase):
     def detect_motion(self):
         self.status = STATE_DETECTED
         self.notify_observers(self.status)
+
+    def clear_motion(self):
+        """모션 감지 상태 클리어"""
+        self.status = STATE_CLEAR
+        self.notify_observers(self.status)

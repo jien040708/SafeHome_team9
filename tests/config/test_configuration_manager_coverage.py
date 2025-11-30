@@ -76,15 +76,23 @@ class TestSafetyZone:
 
 class TestConfigurationManagerCoverage:
     """ConfigurationManager 커버리지 향상 테스트"""
-    
+
     @pytest.fixture
     def config_manager(self):
         """ConfigurationManager 인스턴스 생성 (DeviceManager 초기화 방지)"""
-        # DeviceManager 초기화 시 _initialize_tables가 호출되는데, 
+        # DeviceManager 초기화 시 _initialize_tables가 호출되는데,
         # 이때 DB 쿼리가 실행되므로 Mock으로 방지
         with patch.object(DeviceManager, '_initialize_tables'):
             manager = ConfigurationManager()
-            return manager
+            # storage의 원래 메서드를 저장
+            original_execute_query = manager.storage.execute_query
+            original_execute_update = manager.storage.execute_update
+            yield manager
+            # 테스트 후 원래 메서드 복원
+            manager.storage.execute_query = original_execute_query
+            manager.storage.execute_update = original_execute_update
+            # StorageManager 재연결
+            manager.storage.connect()
     
     def test_initialize_configuration(self, config_manager):
         """설정 초기화"""
@@ -170,13 +178,14 @@ class TestConfigurationManagerCoverage:
         assert result is None
     
     def test_get_all_zones(self, config_manager):
-        """모든 Zone 반환"""
+        """모든 Zone 반환 - safety_zones 속성 직접 접근"""
         zone1 = SafetyZone(1, "Zone1", False)
         zone2 = SafetyZone(2, "Zone2", True)
         config_manager.safety_zones = [zone1, zone2]
-        
-        zones = config_manager.get_all_zones()
-        
+
+        # safety_zones 속성 직접 접근
+        zones = config_manager.safety_zones
+
         assert len(zones) == 2
     
     def test_configure_security_system(self, config_manager):

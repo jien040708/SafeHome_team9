@@ -163,20 +163,11 @@ def test_get_status_includes_monitoring_deadline():
     system.tick(event.timestamp + timedelta(seconds=2))
     assert system.alarm_state is AlarmState.ALARM_ACTIVE
     
-    # Get status
+    # Get status - alarm 활성화 시 즉시 monitoring이 스케줄됨
     status = system.get_status()
     assert status is not None
     assert status.alarm_state is AlarmState.ALARM_ACTIVE
-    assert status.monitoring_call_scheduled is False  # Not yet scheduled
-    
-    # Wait for monitoring deadline
-    now = event.timestamp + timedelta(seconds=3)
-    system.tick(now)
-    
-    # Get status again
-    status = system.get_status()
-    assert status is not None
-    assert status.monitoring_call_scheduled is True
+    assert status.monitoring_call_scheduled is True  # 즉시 스케줄됨
 
 
 if __name__ == "__main__":

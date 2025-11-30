@@ -13,7 +13,7 @@ from ui.main_window import SafeHomeApp
 from utils.constants import (
     MODE_AWAY, MODE_DISARMED, MODE_STAY, VIRTUAL_DEVICE_DIR,
     SENSOR_WIN_DOOR, SENSOR_MOTION, SENSOR_CAMERA, STATE_CLEAR,
-    STATE_OPEN, STATE_CLOSED
+    STATE_OPEN, STATE_CLOSED, STATE_DETECTED
 )
 from domain.services.bootstrap_service import SystemBootstrapper
 
@@ -1024,12 +1024,30 @@ def api_security_sensor_trigger():
                     status_for_controller = "Open"
         
         elif sensor_type == SENSOR_MOTION:
-            # Trigger motion detection
-            if hasattr(sensor, 'detect_motion'):
-                sensor.detect_motion()
-                status_for_controller = "Motion Detected"
+            # Toggle motion detection state
+            if hasattr(sensor, 'get_status'):
+                current_status = sensor.get_status()
+                if current_status == STATE_DETECTED:
+                    # Currently triggered -> clear motion
+                    if hasattr(sensor, 'clear_motion'):
+                        sensor.clear_motion()
+                        status_for_controller = "Clear"
+                    else:
+                        return jsonify({'success': False, 'message': 'Sensor does not support clear_motion'}), 400
+                else:
+                    # Currently clear -> detect motion
+                    if hasattr(sensor, 'detect_motion'):
+                        sensor.detect_motion()
+                        status_for_controller = "Motion Detected"
+                    else:
+                        return jsonify({'success': False, 'message': 'Sensor does not support detect_motion'}), 400
             else:
-                return jsonify({'success': False, 'message': 'Sensor does not support detect_motion'}), 400
+                # Default to detect if can't check status
+                if hasattr(sensor, 'detect_motion'):
+                    sensor.detect_motion()
+                    status_for_controller = "Motion Detected"
+                else:
+                    return jsonify({'success': False, 'message': 'Sensor does not support detect_motion'}), 400
         
         elif sensor_type == SENSOR_CAMERA:
             # Trigger camera
@@ -1050,21 +1068,30 @@ def api_security_sensor_trigger():
             else:
                 return jsonify({'success': False, 'message': 'Sensor does not support trigger action'}), 400
 
+        # Determine if this is a "triggered" state (should activate alarm)
+        triggered_states = ["Open", "Motion Detected", "Triggered", "Recording"]
+        is_triggered_state = status_for_controller in triggered_states
+
         # Update sensor status in system controller if available
         alarm_activated = False
         if safehome_system.system_controller:
             try:
-                safehome_system.system_controller.update_sensor_status(
-                    device_id, 
-                    sensor_type, 
-                    status_for_controller
-                )
-                # Check if alarm was activated
-                if safehome_system.security_system:
-                    status = safehome_system.security_system.get_status()
-                    if status and status.alarm_state.name == 'ALARM_ACTIVE':
-                        alarm_activated = True
-                        print(f"[Flask] Alarm activated after sensor {device_id} trigger")
+                # Only update and check alarm if transitioning to triggered state
+                if is_triggered_state:
+                    safehome_system.system_controller.update_sensor_status(
+                        device_id,
+                        sensor_type,
+                        status_for_controller
+                    )
+                    # Check if alarm was activated (only for triggered states)
+                    if safehome_system.security_system:
+                        status = safehome_system.security_system.get_status()
+                        if status and status.alarm_state.name == 'ALARM_ACTIVE':
+                            alarm_activated = True
+                            print(f"[Flask] Alarm activated after sensor {device_id} trigger")
+                else:
+                    # For non-triggered states (Closed, Clear), just log without alarm check
+                    print(f"[Flask] Sensor {device_id} reset to {status_for_controller} (no alarm trigger)")
             except Exception as exc:
                 print(f"[Flask] Failed to update sensor status in controller: {exc}")
 
