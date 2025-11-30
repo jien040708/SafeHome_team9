@@ -7,6 +7,8 @@ from unittest.mock import Mock, patch, MagicMock
 from config.configuration_manager import ConfigurationManager, SafeHomeMode, SafetyZone
 from config.system_settings import SystemSettings
 from security.security_system import SecuritySystem, SecurityMode
+from tests.utils import create_mock_row
+from domain.device_manager import DeviceManager
 
 
 class TestSafeHomeMode:
@@ -77,8 +79,12 @@ class TestConfigurationManagerCoverage:
     
     @pytest.fixture
     def config_manager(self):
-        """ConfigurationManager 인스턴스 생성"""
-        return ConfigurationManager()
+        """ConfigurationManager 인스턴스 생성 (DeviceManager 초기화 방지)"""
+        # DeviceManager 초기화 시 _initialize_tables가 호출되는데, 
+        # 이때 DB 쿼리가 실행되므로 Mock으로 방지
+        with patch.object(DeviceManager, '_initialize_tables'):
+            manager = ConfigurationManager()
+            return manager
     
     def test_initialize_configuration(self, config_manager):
         """설정 초기화"""
@@ -106,8 +112,8 @@ class TestConfigurationManagerCoverage:
     def test_load_safehome_modes_with_data(self, config_manager):
         """SafeHome 모드 로드 - 데이터 있음"""
         mock_rows = [
-            {'mode_id': 1, 'mode_name': 'Disarmed', 'description': 'System disarmed'},
-            {'mode_id': 2, 'mode_name': 'Away', 'description': 'All sensors active'},
+            create_mock_row({'mode_id': 1, 'mode_name': 'Disarmed', 'description': 'System disarmed'}),
+            create_mock_row({'mode_id': 2, 'mode_name': 'Away', 'description': 'All sensors active'}),
         ]
         config_manager.storage.execute_query = Mock(return_value=mock_rows)
         
@@ -127,8 +133,8 @@ class TestConfigurationManagerCoverage:
     def test_load_safety_zones_with_data(self, config_manager):
         """Safety Zone 로드 - 데이터 있음"""
         mock_rows = [
-            {'zone_id': 1, 'zone_name': 'Zone1', 'is_armed': 0},
-            {'zone_id': 2, 'zone_name': 'Zone2', 'is_armed': 1},
+            create_mock_row({'zone_id': 1, 'zone_name': 'Zone1', 'is_armed': 0}),
+            create_mock_row({'zone_id': 2, 'zone_name': 'Zone2', 'is_armed': 1}),
         ]
         config_manager.storage.execute_query = Mock(return_value=mock_rows)
         
@@ -176,14 +182,10 @@ class TestConfigurationManagerCoverage:
     def test_configure_security_system(self, config_manager):
         """SecuritySystem 설정"""
         security_system = Mock(spec=SecuritySystem)
-        config_manager._security_system_ref = security_system
         
         # Zone과 센서 설정
         zone = SafetyZone(1, "Zone1", False)
         config_manager.safety_zones = [zone]
-        
-        # DeviceManager mock
-        config_manager.device_manager.get_all_devices = Mock(return_value=[])
         
         config_manager.configure_security_system(security_system)
         
@@ -191,48 +193,50 @@ class TestConfigurationManagerCoverage:
         assert config_manager._security_system_ref is not None
     
     def test_create_zone(self, config_manager):
-        """Zone 생성"""
-        config_manager.storage.execute_update = Mock(return_value=True)
+        """Zone 생성 (add_safety_zone)"""
+        config_manager.storage.execute_update = Mock(return_value=1)
+        config_manager.storage.get_last_insert_id = Mock(return_value=1)
+        config_manager.reconfigure_security_system = Mock()
         
-        result = config_manager.create_zone("NewZone")
+        result = config_manager.add_safety_zone("NewZone")
         
-        assert result is not None
-        assert result.zone_name == "NewZone"
+        assert result is True
     
     def test_create_zone_failure(self, config_manager):
         """Zone 생성 실패"""
-        config_manager.storage.execute_update = Mock(return_value=False)
+        config_manager.storage.execute_update = Mock(return_value=0)
         
-        result = config_manager.create_zone("NewZone")
+        result = config_manager.add_safety_zone("NewZone")
         
-        assert result is None
+        assert result is False
     
     def test_update_zone(self, config_manager):
-        """Zone 업데이트"""
+        """Zone 업데이트 (modify_safety_zone)"""
         zone = SafetyZone(1, "Zone1", False)
         config_manager.safety_zones = [zone]
-        config_manager.storage.execute_update = Mock(return_value=True)
+        config_manager.storage.execute_update = Mock(return_value=1)
         
-        result = config_manager.update_zone(1, "UpdatedZone")
+        result = config_manager.modify_safety_zone(1, zone_name="UpdatedZone")
         
-        assert result is not None
-        assert result.zone_name == "UpdatedZone"
+        assert result is True
+        assert zone.zone_name == "UpdatedZone"
     
     def test_update_zone_not_found(self, config_manager):
         """Zone 업데이트 - Zone 없음"""
         config_manager.safety_zones = []
         
-        result = config_manager.update_zone(999, "UpdatedZone")
+        result = config_manager.modify_safety_zone(999, zone_name="UpdatedZone")
         
-        assert result is None
+        assert result is False
     
     def test_delete_zone(self, config_manager):
-        """Zone 삭제"""
+        """Zone 삭제 (delete_safety_zone)"""
         zone = SafetyZone(1, "Zone1", False)
         config_manager.safety_zones = [zone]
-        config_manager.storage.execute_update = Mock(return_value=True)
+        config_manager.storage.execute_update = Mock(return_value=1)
+        config_manager.reconfigure_security_system = Mock()
         
-        result = config_manager.delete_zone(1)
+        result = config_manager.delete_safety_zone(1)
         
         assert result is True
     
@@ -240,39 +244,43 @@ class TestConfigurationManagerCoverage:
         """Zone 삭제 - Zone 없음"""
         config_manager.safety_zones = []
         
-        result = config_manager.delete_zone(999)
+        result = config_manager.delete_safety_zone(999)
         
         assert result is False
     
     def test_assign_sensor_to_zone(self, config_manager):
         """센서를 Zone에 할당"""
-        config_manager.storage.execute_update = Mock(return_value=True)
+        zone = SafetyZone(1, "Zone1", False)
+        config_manager.safety_zones = [zone]
+        config_manager.device_manager.assign_device_to_zone = Mock(return_value=True)
+        config_manager.reconfigure_security_system = Mock()
         
         result = config_manager.assign_sensor_to_zone("sensor1", 1)
         
         assert result is True
     
     def test_assign_sensor_to_zone_failure(self, config_manager):
-        """센서 할당 실패"""
-        config_manager.storage.execute_update = Mock(return_value=False)
+        """센서 할당 실패 - Zone 없음"""
+        config_manager.safety_zones = []
         
-        result = config_manager.assign_sensor_to_zone("sensor1", 1)
+        result = config_manager.assign_sensor_to_zone("sensor1", 999)
         
         assert result is False
     
     def test_unassign_sensor_from_zone(self, config_manager):
-        """센서 할당 해제"""
-        config_manager.storage.execute_update = Mock(return_value=True)
+        """센서 할당 해제 (remove_sensor_assignment)"""
+        config_manager.device_manager.remove_device_zone_assignment = Mock(return_value=True)
+        config_manager.reconfigure_security_system = Mock()
         
-        result = config_manager.unassign_sensor_from_zone("sensor1")
+        result = config_manager.remove_sensor_assignment("sensor1")
         
         assert result is True
     
     def test_unassign_sensor_from_zone_failure(self, config_manager):
         """센서 할당 해제 실패"""
-        config_manager.storage.execute_update = Mock(return_value=False)
+        config_manager.device_manager.remove_device_zone_assignment = Mock(return_value=False)
         
-        result = config_manager.unassign_sensor_from_zone("sensor1")
+        result = config_manager.remove_sensor_assignment("sensor1")
         
         assert result is False
 
