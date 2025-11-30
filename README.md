@@ -4,6 +4,8 @@
 
 SafeHome is a comprehensive home security and surveillance system designed to protect your property and provide peace of mind. The system integrates security management and surveillance capabilities into a single, easy-to-use platform accessible both locally through a control panel and remotely through a web browser.
 
+Implementation and Testing document and User manual files are in 'docs' folder.
+
 ## Features
 
 ### Security Management
