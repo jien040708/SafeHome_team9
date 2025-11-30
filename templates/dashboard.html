@@ -178,6 +178,18 @@
             display: block;
         }
 
+        @keyframes pulse {
+            0% {
+                box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.7);
+            }
+            70% {
+                box-shadow: 0 0 0 10px rgba(229, 62, 62, 0);
+            }
+            100% {
+                box-shadow: 0 0 0 0 rgba(229, 62, 62, 0);
+            }
+        }
+
         @media (max-width: 768px) {
             .button-grid {
                 grid-template-columns: 1fr;
@@ -195,6 +207,9 @@
         <h1>SafeHome Dashboard</h1>
         <div class="user-info">
             <span>Welcome, <strong>{{ username }}</strong></span>
+            <button id="refreshBtn" onclick="manualRefresh()" title="Refresh Status" style="background: #48bb78; margin-right: 10px;">
+                🔄 Refresh
+            </button>
             <button onclick="logout()">Logout</button>
         </div>
     </div>
@@ -211,6 +226,7 @@
                 <span class="value" id="securityAlarm">Loading...</span>
             </div>
         </div>
+
 
         <!-- Main Control Buttons -->
         <div class="button-grid">
@@ -233,6 +249,7 @@
                 <div class="button-icon">🚨</div>
                 <div>Panic Alarm</div>
             </button>
+            
         </div>
 
         <!-- Secondary Buttons -->
@@ -250,6 +267,20 @@
             <button class="main-button btn-success" onclick="goToZones()">
                 <div class="button-icon">🗺️</div>
                 <div>Zone Management</div>
+            </button>
+            
+            <button class="main-button btn-warning" onclick="goToSensorManagement()">
+                <div class="button-icon">🔧</div>
+                <div>Sensor Management</div>
+            </button>
+        </div>
+
+        <!-- Clear Alarm Button (always visible at bottom, disabled when no alarm) -->
+        <div style="margin-top: 40px; margin-bottom: 20px; text-align: center;">
+            <button id="clearAlarmButton" onclick="clearAlarm()" 
+                    style="padding: 8px 24px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.3s; background: #cbd5e0; color: #718096; cursor: not-allowed; opacity: 0.7;"
+                    disabled>
+                🔕 Clear Alarm
             </button>
         </div>
 
@@ -311,8 +342,11 @@
         try {
             await callSecurityApi('/api/security/arm', { mode: 'Away' });
             showControlMessage('System armed (Away)', 'success');
+            // Immediately refresh status after action
+            await refreshSecurityStatus();
         } catch (error) {
             showControlMessage(error.message, 'error');
+            await refreshSecurityStatus();
         }
     }
 
@@ -320,8 +354,11 @@
         try {
             await callSecurityApi('/api/security/arm', { mode: 'Stay' });
             showControlMessage('System armed (Stay)', 'success');
+            // Immediately refresh status after action
+            await refreshSecurityStatus();
         } catch (error) {
             showControlMessage(error.message, 'error');
+            await refreshSecurityStatus();
         }
     }
 
@@ -329,8 +366,11 @@
         try {
             await callSecurityApi('/api/security/disarm');
             showControlMessage('System disarmed', 'success');
+            // Immediately refresh status after action
+            await refreshSecurityStatus();
         } catch (error) {
             showControlMessage(error.message, 'error');
+            await refreshSecurityStatus();
         }
     }
 
@@ -341,8 +381,11 @@
         try {
             await callSecurityApi('/api/security/panic');
             showControlMessage('Panic alarm activated', 'success');
+            // Immediately refresh status after action
+            await refreshSecurityStatus();
         } catch (error) {
             showControlMessage(error.message, 'error');
+            await refreshSecurityStatus();
         }
     }
 
@@ -367,7 +410,79 @@
             return;
         }
         document.getElementById('securityMode').textContent = status.mode || 'N/A';
-        document.getElementById('securityAlarm').textContent = status.alarm_state || 'IDLE';
+        const alarmState = status.alarm_state || 'IDLE';
+        document.getElementById('securityAlarm').textContent = alarmState;
+        
+        // Update clear alarm button state based on alarm state
+        const clearAlarmButton = document.getElementById('clearAlarmButton');
+        // Check if alarm is active (case-insensitive check)
+        const isAlarmActive = alarmState && (alarmState.toUpperCase() === 'ALARM_ACTIVE' || alarmState.toUpperCase().includes('ALARM'));
+        
+        if (clearAlarmButton) {
+            if (isAlarmActive) {
+                // Enable button when alarm is active
+                clearAlarmButton.disabled = false;
+                clearAlarmButton.style.background = '#e53e3e';
+                clearAlarmButton.style.color = 'white';
+                clearAlarmButton.style.cursor = 'pointer';
+                clearAlarmButton.style.opacity = '1';
+                clearAlarmButton.style.boxShadow = '0 2px 8px rgba(229, 62, 62, 0.4)';
+                clearAlarmButton.onmouseover = function() {
+                    if (!this.disabled) {
+                        this.style.background = '#c53030';
+                        this.style.transform = 'translateY(-2px)';
+                    }
+                };
+                clearAlarmButton.onmouseout = function() {
+                    if (!this.disabled) {
+                        this.style.background = '#e53e3e';
+                        this.style.transform = 'translateY(0)';
+                    }
+                };
+            } else {
+                // Disable button when no alarm (grayed out)
+                clearAlarmButton.disabled = true;
+                clearAlarmButton.style.background = '#cbd5e0';
+                clearAlarmButton.style.color = '#718096';
+                clearAlarmButton.style.cursor = 'not-allowed';
+                clearAlarmButton.style.opacity = '0.7';
+                clearAlarmButton.style.boxShadow = 'none';
+                clearAlarmButton.style.transform = 'translateY(0)';
+                clearAlarmButton.onmouseover = null;
+                clearAlarmButton.onmouseout = null;
+            }
+        }
+    }
+
+    async function clearAlarm() {
+        try {
+            await callSecurityApi('/api/security/clear-alarm');
+            showControlMessage('Alarm cleared successfully', 'success');
+            // Immediately refresh status after action
+            await refreshSecurityStatus();
+        } catch (error) {
+            showControlMessage(error.message, 'error');
+            await refreshSecurityStatus();
+        }
+    }
+
+    async function manualRefresh() {
+        const refreshBtn = document.getElementById('refreshBtn');
+        if (!refreshBtn) return;
+        
+        const originalText = refreshBtn.innerHTML;
+        refreshBtn.innerHTML = '🔄 Refreshing...';
+        refreshBtn.disabled = true;
+        
+        try {
+            await refreshSecurityStatus();
+            showControlMessage('Status refreshed', 'success');
+        } catch (error) {
+            showControlMessage('Failed to refresh status', 'error');
+        } finally {
+            refreshBtn.innerHTML = originalText;
+            refreshBtn.disabled = false;
+        }
     }
 
     function logout() {
@@ -388,9 +503,21 @@
         window.location.href = '/zones';
     }
 
+    function goToSensorManagement() {
+        window.location.href = '/sensor-management';
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         refreshSecurityStatus();
         setInterval(refreshSecurityStatus, 15000);
+        
+        // If redirected from sensor management with refresh parameter, refresh immediately
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('refresh') === 'true') {
+            setTimeout(() => {
+                refreshSecurityStatus();
+            }, 500); // Small delay to ensure page is fully loaded
+        }
     });
 </script>
 </body>

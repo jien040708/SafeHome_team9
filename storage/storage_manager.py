@@ -189,11 +189,19 @@ class StorageManager:
         :return: 결과 리스트 또는 None
         """
         try:
+            # Ensure connection is established
+            if self.connection is None:
+                if not self.connect():
+                    print("[StorageManager] Failed to connect to database for query")
+                    return None
+            
             cursor = self.connection.cursor()
             cursor.execute(sql, params)
             return cursor.fetchall()
         except sqlite3.Error as e:
             print(f"[StorageManager] Query error: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def execute_update(self, sql: str, params: Tuple = ()) -> int:
@@ -204,13 +212,22 @@ class StorageManager:
         :return: 영향받은 행 수 또는 -1 (에러 시)
         """
         try:
+            # Ensure connection is established
+            if self.connection is None:
+                if not self.connect():
+                    print("[StorageManager] Failed to connect to database for update")
+                    return -1
+            
             cursor = self.connection.cursor()
             cursor.execute(sql, params)
             self.connection.commit()
             return cursor.rowcount
         except sqlite3.Error as e:
             print(f"[StorageManager] Update error: {e}")
-            self.connection.rollback()
+            import traceback
+            traceback.print_exc()
+            if self.connection:
+                self.connection.rollback()
             return -1
 
     def execute_many(self, sql: str, params_list: List[Tuple]) -> int:

@@ -78,6 +78,7 @@ class System:
         self.device_manager = None
         self.sensors = []
         self.siren: Optional[Siren] = None
+        self.alarms: List = []  # List of Alarm instances (composition: 1:*)
         self.security_listener = None
         self.camera_gateway = SystemCameraGateway(self)
 
@@ -219,8 +220,16 @@ class System:
             self.configuration_manager = ConfigurationManager()
             self.configuration_manager.initialize_configuration()
 
-            # 3. Siren ? SecuritySystem ???
+            # 3. Siren & Alarm initialization for SecuritySystem
             self.siren = Siren("MainSiren")
+            
+            # Initialize Alarm instances (composition: System has multiple Alarms)
+            from security.security_system import Alarm
+            # Create default alarms - can be configured later
+            self.alarms = [
+                Alarm(alarm_id=1, x_coord=100, y_coord=100),  # Main alarm
+                Alarm(alarm_id=2, x_coord=200, y_coord=200),  # Secondary alarm
+            ]
 
             def get_delay_time():
                 settings = self.configuration_manager.get_system_setting()
@@ -228,15 +237,37 @@ class System:
                 return timedelta(seconds=delay_seconds)
 
             def call_monitoring_service(reason: str):
-                print(f"[SecuritySystem] Monitoring service notified: {reason}")
+                message = f"[SecuritySystem] Monitoring service notified: {reason}"
+                print(message)
+                import sys
+                sys.stdout.write(message + "\n")
+                sys.stdout.flush()
 
             def activate_siren():
+                # Activate siren
                 if self.siren:
                     self.siren.activate()
+                # Activate all alarms using Alarm class (ring all alarms)
+                print(f"[System] Activating {len(self.alarms)} Alarm instance(s)...")
+                for alarm in self.alarms:
+                    if alarm:
+                        alarm.ring_alarm(True)
+                        print(f"[System] Alarm {alarm.get_id()} at {alarm.get_location()} is now ringing.")
+                print("[SecuritySystem] Siren activated - Alarm is sounding!")
+                import sys
+                sys.stdout.write("[SecuritySystem] Siren activated - Alarm is sounding!\n")
+                sys.stdout.flush()
 
             def deactivate_siren():
+                # Deactivate siren
                 if self.siren:
                     self.siren.deactivate()
+                # Deactivate all alarms using Alarm class (silence all alarms)
+                print(f"[System] Deactivating {len(self.alarms)} Alarm instance(s)...")
+                for alarm in self.alarms:
+                    if alarm:
+                        alarm.ring_alarm(False)
+                        print(f"[System] Alarm {alarm.get_id()} at {alarm.get_location()} is now silenced.")
 
             def get_monitored_sensors_state():
                 states = {}
