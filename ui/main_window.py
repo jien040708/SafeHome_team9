@@ -7,9 +7,13 @@ from PIL import Image, ImageTk
 import os
 from pathlib import Path
 from utils.constants import (
-    MODE_AWAY, MODE_DISARMED, MODE_STAY,
-    STATE_OPEN, STATE_CLOSED, STATE_DETECTED,
-    VIRTUAL_DEVICE_DIR
+    MODE_AWAY,
+    MODE_DISARMED,
+    MODE_STAY,
+    STATE_OPEN,
+    STATE_CLOSED,
+    STATE_DETECTED,
+    VIRTUAL_DEVICE_DIR,
 )
 from security.interfaces import SecurityEventListener
 from domain.services import (
@@ -21,6 +25,7 @@ from domain.services import (
     ZonesViewModel,
     ModesViewModel,
 )
+from ui.control_panel_device import SafeHomeControlPanelDevice
 
 # 페이지 이름 상수
 PAGES = ("PowerOff", "Login", "MainMenu", "Zones", "Modes", "Monitoring")
@@ -344,8 +349,8 @@ class LoginView(ttk.Frame):
         self.status_label = ttk.Label(self.panel, text="", font=("Helvetica", 10), foreground="blue")
         self.status_label.pack(pady=(0, 10))
 
-        self.user_entry = ttk.Entry(self.panel, width=30)
-        self.pass_entry = ttk.Entry(self.panel, width=30, show="•")
+        self.user_entry = ttk.Entry(self.panel, width=30, state="readonly")
+        self.pass_entry = ttk.Entry(self.panel, width=30, show="*", state="readonly")
 
         ttk.Label(self.panel, text="User ID").pack(anchor="w")
         self.user_entry.pack(pady=(0, 10))
@@ -353,19 +358,33 @@ class LoginView(ttk.Frame):
         ttk.Label(self.panel, text="Password").pack(anchor="w")
         self.pass_entry.pack(pady=(0, 20))
 
-        self.login_btn = ttk.Button(self.panel, text="LOGIN", style="Primary.TButton",
-                   command=self.attempt_login)
+        self.login_btn = ttk.Button(
+            self.panel,
+            text="LOGIN (use keypad #)",
+            style="Primary.TButton",
+            command=self.attempt_login,
+            state="disabled",
+        )
         self.login_btn.pack()
 
-        # Bind Enter key to login
-        self.user_entry.bind('<Return>', lambda e: self.attempt_login())
-        self.pass_entry.bind('<Return>', lambda e: self.attempt_login())
+        self.control_panel_device = SafeHomeControlPanelDevice(self.app.root, self)
+
 
     def attempt_login(self):
         uid = self.user_entry.get()
         pw = self.pass_entry.get()
 
+        self._run_login(uid, pw)
+
+    def submit_login_from_device(self, user_id: str, password: str):
+        return self._run_login(user_id, password)
+
+    def _run_login(self, uid: str, pw: str):
         outcome = self.presenter.attempt_login(uid, pw)
+        self._handle_login_outcome(outcome)
+        return outcome
+
+    def _handle_login_outcome(self, outcome):
         self._update_status(outcome.status_text, outcome.status_color)
 
         if outcome.alert_message:
@@ -379,17 +398,30 @@ class LoginView(ttk.Frame):
                 self.unlock_control_panel()
             if outcome.navigate_to:
                 self.app.show_page(outcome.navigate_to)
-        self.pass_entry.delete(0, tk.END)
-        if outcome.success:
-            self.user_entry.delete(0, tk.END)
+            self.update_user_input("")
+            self.update_password_input("")
         else:
-            self.pass_entry.focus()
+            self.update_password_input("")
+        return outcome
 
     def _update_status(self, text: str, color: str):
         if text:
             self.status_label.config(text=text, foreground=color)
         else:
             self.status_label.config(text="", foreground="blue")
+
+    def update_user_input(self, value: str):
+        self._set_entry_text(self.user_entry, value)
+
+    def update_password_input(self, value: str):
+        self._set_entry_text(self.pass_entry, value)
+
+    def _set_entry_text(self, entry: ttk.Entry, value: str):
+        current_state = entry.cget("state")
+        entry.config(state="normal")
+        entry.delete(0, tk.END)
+        entry.insert(0, value)
+        entry.config(state=current_state)
 
     def lock_control_panel(self):
         """Lock the control panel UI"""
@@ -408,24 +440,28 @@ class LoginView(ttk.Frame):
         )
 
         print("[LoginView] Control panel locked due to too many failed attempts.")
+        if hasattr(self, "control_panel_device"):
+            self.control_panel_device.notify_lock()
 
     def unlock_control_panel(self):
         """Unlock the control panel UI (for admin use)"""
         self.is_locked = False
 
         # Enable input fields
-        self.user_entry.config(state='normal')
-        self.pass_entry.config(state='normal')
-        self.login_btn.config(state='normal')
+        self.user_entry.config(state='readonly')
+        self.pass_entry.config(state='readonly')
+        self.login_btn.config(state='disabled')
 
         # Clear lock message
         self.status_label.config(text="", foreground="blue", font=("Helvetica", 10))
 
         # Clear input fields
-        self.user_entry.delete(0, tk.END)
-        self.pass_entry.delete(0, tk.END)
+        self.update_user_input("")
+        self.update_password_input("")
 
         print("[LoginView] Control panel unlocked.")
+        if hasattr(self, "control_panel_device"):
+            self.control_panel_device.notify_unlock()
 
 
 class MainMenuView(ttk.Frame):

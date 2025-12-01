@@ -14,7 +14,7 @@ from utils.constants import STATE_IDLE, VIRTUAL_DEVICE_DIR
 project_root = Path(__file__).parent.parent
 virtual_device_path = project_root / VIRTUAL_DEVICE_DIR
 if virtual_device_path.exists() and str(virtual_device_path) not in sys.path:
-    sys.path.insert(0, str(virtual_device_path))
+    sys.path.append(str(virtual_device_path))
 
 from device.device_camera import DeviceCamera as VirtualDeviceCamera
 
